@@ -1,0 +1,32 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 20.8b1
+    hooks:
+      - id: black
+        additional_dependencies: ['click==8.0.4']
+        files:  '(medical_reasoning/|test/|scripts/)'
+
+  - repo: https://gitlab.com/pycqa/flake8
+    rev: 3.8.4
+    hooks:
+      - id: flake8
+        files: '(medical_reasoning/|tests/|scripts/)'
+
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.0.1
+    hooks:
+      - id: check-merge-conflict
+      - id: trailing-whitespace
+        exclude: ^.github/
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: fix-encoding-pragma
+        args: [ '--remove' ]
+
+  - repo: https://github.com/asottile/reorder_python_imports
+    rev: v2.5.0
+    hooks:
+      - id: reorder-python-imports
+        files: '(medical_reasoning/|tests/|scripts/)'
