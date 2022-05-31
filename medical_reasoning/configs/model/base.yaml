@@ -1,0 +1,6 @@
+defaults:
+  - template: multiple_choice
+
+_target_: medical_reasoning.models.Reasoner
+engine: ???
+prompt_mode: chain_of_thought

@@ -2,26 +2,25 @@ import logging
 import os
 import string
 import sys
-from pathlib import Path
 import time
-from sklearn.metrics import accuracy_score, f1_score
-
-import numpy as np
-from hydra.utils import instantiate
-from tqdm import tqdm
+from pathlib import Path
 
 import datasets
 import hydra
+import numpy as np
 import rich
-from omegaconf import DictConfig
-from medical_reasoning import configs
-from medical_reasoning.utils.config import print_config
-
+from hydra.utils import instantiate
 from loguru import logger
+from omegaconf import DictConfig
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import f1_score
+from tqdm import tqdm
+
+from medical_reasoning.utils.config import print_config
 
 
 @hydra.main(
-    config_path=str(Path(configs.__file__).parent),
+    config_path="configs/",
     config_name="config.yaml",
     version_base="1.2",
 )
@@ -54,7 +53,9 @@ def run(config: DictConfig) -> None:
         indices = list(range(len(dset)))
         rgn = np.random.RandomState(0)
         rgn.shuffle(indices)
-        for i, row_idx in (pbar := tqdm(enumerate(indices), unit=" questions", total=len(indices))):
+        for i, row_idx in (
+            pbar := tqdm(enumerate(indices), unit=" questions", total=len(indices))
+        ) :
             row = dset[row_idx]
             question = row["question"]
             options = row["options"]
@@ -80,8 +81,12 @@ def run(config: DictConfig) -> None:
             # write the result to file
             with open(output_dir / f"{split}_{row_idx}.txt", "w") as f:
                 outcome = "correct" if model_answer == answer else "incorrect"
-                formatted_options = ','.join(
-                    [f"{string.ascii_uppercase[i]}) {option}" for i, option in enumerate(options)])
+                formatted_options = ",".join(
+                    [
+                        f"{string.ascii_uppercase[i]}) {option}"
+                        for i, option in enumerate(options)
+                    ]
+                )
                 output_str = f"""\
                 Outcome: {outcome}\n
                 Answer: {answer}: {options[answer_idx]}\n
@@ -97,8 +102,10 @@ def run(config: DictConfig) -> None:
                 time.sleep(max(t, 0))
             t0 = time.time()
 
-        results[split] = {'accuracy': accuracy_score(labels, preds),
-                          'f1': f1_score(labels, preds, average="macro")}
+        results[split] = {
+            "accuracy": accuracy_score(labels, preds),
+            "f1": f1_score(labels, preds, average="macro"),
+        }
 
     for split, accuracy in results.items():
         rich.print(f">> {split}: {accuracy:.3%}")

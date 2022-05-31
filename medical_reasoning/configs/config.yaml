@@ -1,0 +1,12 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - dataset: medqa_us
+  - model: ada
+  - sys: local
+  - hydra: default
+
+    # enable color logging
+  - override hydra/hydra_logging: colorlog
+  - override hydra/job_logging: colorlog

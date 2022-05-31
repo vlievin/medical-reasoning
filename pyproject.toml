@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "medical-reasoning"
+version = "0.1.0"
+description = ""
+authors = ["Valentin Lievin <valentin.lievin@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+openai = "^0.19.0"
+python-dotenv = "^0.20.0"
+rich = "^12.4.4"
+datasets = "^2.2.2"
+hydra-core = "^1.2.0"
+tqdm = "^4.64.0"
+loguru = "^0.6.0"
+Pillow = "^9.1.1"
+sklearn = "^0.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+poethepoet = "^0.13.1"
+pre-commit = "^2.19.0"
+hydra-colorlog = "^1.2.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.poetry.scripts]
+experiment = "medical_reasoning.run:run"
+
+
+[tool.poe.tasks]
+format  = "pre-commit run --all-files"
+debug_exps = "experiment -m model=ada dataset.name=medqa_us,pubmedqa,medmcqa,headqa"

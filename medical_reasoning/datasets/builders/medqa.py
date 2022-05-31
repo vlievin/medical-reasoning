@@ -64,7 +64,9 @@ class MedQAConfig(datasets.BuilderConfig):
         Args:
             **kwargs: keyword arguments forwarded to super.
         """
-        super(MedQAConfig, self).__init__(version=datasets.Version("1.0.0", ""), **kwargs)
+        super(MedQAConfig, self).__init__(
+            version=datasets.Version("1.0.0", ""), **kwargs
+        )
 
 
 class MedQA(datasets.GeneratorBasedBuilder):

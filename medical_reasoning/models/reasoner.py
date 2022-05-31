@@ -1,83 +1,17 @@
-import abc
 import os
-import string
-from abc import ABC
 from typing import Any
 from typing import Dict
-from typing import List
 
 import openai
 from dotenv import load_dotenv
 
-load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-LINE_BRAKE = "\n"
+from medical_reasoning.models.templates import ChainOfThoughtTemplate
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-
-def safe_index(lst: List, value: Any, default_index: Any) -> Any:
-    if value in lst:
-        return lst.index(value)
-    else:
-        return default_index
-
-
-class PromptTemplate(object):
-    @abc.abstractmethod
-    def format_question(self, *args, **kwargs) -> str:
-        raise NotImplementedError()
-
-
-class ChainOfThoughtTemplate(PromptTemplate, ABC):
-    zero_shot_prompt = ...
-    reasoning_prompt = ...
-    extractive_prompt = ...
-
-    def make_zero_shot_prompt(self, *args, **kwargs) -> str:
-        question_prompt = self.format_question(*args, **kwargs)
-        return f"{question_prompt}\n\n{self.zero_shot_prompt}"
-
-    def make_reasoning_prompt(self, *args, **kwargs) -> str:
-        question_prompt = self.format_question(*args, **kwargs)
-        return f"{question_prompt}\n\n{self.reasoning_prompt}"
-
-    def make_extractive_prompt(self, completed_prompt: str) -> str:
-        return f"{completed_prompt} {self.extractive_prompt}"
-
-    @staticmethod
-    def infer_answer(self, extractive_prompt_answer) -> Any:
-        ...
-
-
-class MultipleChoiceTemplate(ChainOfThoughtTemplate):
-    zero_shot_prompt = "A: among A through D, the answer is "
-    reasoning_prompt = "A: Let's think step by step like a medical expert."
-    extractive_prompt = "Therefore, among A through D, the answer is "
-
-    def __init__(self, options=None):
-        if options is None:
-            options = ["A", "B", "C", "D"]
-        self.options = options
-
-    @staticmethod
-    def format_question(question: str, options: List[str]) -> str:
-        formatted_options = [
-            f"{string.ascii_uppercase[i]}) {option}" for i, option in enumerate(options)
-        ]
-        return f"Q: {question}\n\n{LINE_BRAKE.join(formatted_options)}"
-
-    def infer_answer(self, extractive_prompt_answer: str) -> str:
-        indices = [
-            (o, safe_index(extractive_prompt_answer, o, None)) for o in self.options
-        ]
-        indices = list(filter(lambda x: x[1] is not None, indices))
-        if len(indices):
-            return min(indices, key=lambda x: x[1])[0]
-        else:
-            return None
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
 class Reasoner(object):
@@ -92,6 +26,14 @@ class Reasoner(object):
         self.template = template
         self.prompt_mode = prompt_mode
         assert self.prompt_mode in {"chain_of_thought", "zero_shot"}
+
+    def __repr__(self):
+        return (
+            f"Reasoner("
+            f"engine={self.engine}, "
+            f"prompt_mode={self.prompt_mode}, "
+            f"template={self.template})"
+        )
 
     def __call__(self, *args, **kwargs) -> (str, Dict[str, Any]):
         diagnostics = {}

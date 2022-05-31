@@ -1,5 +1,4 @@
-_target_: medical_reasoning.models.Reasoner
-name: ???
-subset: null
-splits: null
-cache_dir: ${sys.cache_dir}
+defaults:
+  - base
+
+engine: text-ada-001

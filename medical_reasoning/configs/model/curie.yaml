@@ -1,0 +1,4 @@
+defaults:
+  - base
+
+engine: text-curie-001
