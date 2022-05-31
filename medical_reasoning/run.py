@@ -41,10 +41,12 @@ def run(config: DictConfig) -> None:
     output_dir = Path(os.getcwd()) / "output"
     output_dir.mkdir(exist_ok=True, parents=True)
 
-    rich.print(f">> Logging to {output_dir}")
+    logger.info(f"Logging to {output_dir}")
     rate_limit = 2
     t0 = time.time()
-    splits = ["test"]
+    splits = list(dataset.keys())
+    split_info = [f"{split} ({len(dataset[split])})" for split in splits]
+    logger.info(f"Found splits: {', '.join(split_info)}")
     results = {}
     for split in splits:
         dset = dataset[split]
@@ -108,8 +110,8 @@ def run(config: DictConfig) -> None:
         }
 
     for split, accuracy in results.items():
-        rich.print(f">> {split}: {accuracy:.3%}")
-    rich.print(f">> Logged to {output_dir}")
+        logger.info(f">> {split}: {accuracy:.3%}")
+    logger.info(f">> Logged to {output_dir}")
 
 
 if __name__ == "__main__":

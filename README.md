@@ -11,7 +11,7 @@
 curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python -
 ```
 
-2. Install dependencies (within the project directory `fz-openqa/`)
+2. Install dependencies
 
 ```shell
 poetry install
@@ -24,6 +24,8 @@ poetry run pre-commit install
 
 ```shell
 poetry run experiment <args>
+# Example
+poetry run experiment engine=ada dataset.name=medqa_us dataset.subset=10
 ```
 
 ```shell

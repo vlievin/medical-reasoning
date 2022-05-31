@@ -33,4 +33,4 @@ experiment = "medical_reasoning.run:run"
 
 [tool.poe.tasks]
 format  = "pre-commit run --all-files"
-debug_exps = "experiment -m model=ada dataset.name=medqa_us,pubmedqa,medmcqa,headqa"
+debug_exps = "experiment -m model=ada dataset=medqa_us,pubmedqa,medmcqa,headqa dataset.subset=10"

@@ -16,7 +16,7 @@ from medical_reasoning.datasets.formatters import PubMedQAFormatter
 
 QA_DATASETS = {
     "medqa_us": (medqa.__file__, "us"),
-    "medqa_tw": (medqa.__file__, "tw"),
+    "medqa_tw.yaml": (medqa.__file__, "tw"),
     "pubmedqa": ("pubmed_qa", "pqa_labeled"),
     "headqa": ("head_qa", "en"),
     "medmcqa": ("medmcqa", None),
