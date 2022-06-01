@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import string
@@ -9,14 +10,22 @@ import datasets
 import hydra
 import numpy as np
 import rich
+from hydra.core.hydra_config import HydraConfig
+from hydra.types import RunMode
 from hydra.utils import instantiate
 from loguru import logger
 from omegaconf import DictConfig
+from omegaconf import open_dict
+from rich.table import Table
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import f1_score
 from tqdm import tqdm
 
+from medical_reasoning.datasets import DatasetBuilder
+from medical_reasoning.models import Reasoner
 from medical_reasoning.utils.config import print_config
+
+SEPARATOR = "-" * 80 + "\n"
 
 
 @hydra.main(
@@ -25,29 +34,45 @@ from medical_reasoning.utils.config import print_config
     version_base="1.2",
 )
 def run(config: DictConfig) -> None:
+    hydra_config = HydraConfig().get()
+    # datasets.disable_caching()
     logging.getLogger("openai").setLevel(logging.WARNING)
     datasets.logging.set_verbosity(datasets.logging.ERROR)
-    print_config(config)
+    if config.print_config:
+        print_config(config)
+
+    # setup the result file
+    work_dir = config.sys.work_dir
+    if hydra_config.mode == RunMode.MULTIRUN:
+        result_file = Path(work_dir) / hydra_config.sweep.dir / "results.json"
+    else:
+        result_file = Path(work_dir) / hydra_config.run.dir / "results.json"
 
     # initialize the data module
-    builder = instantiate(config.dataset)
+    builder: DatasetBuilder = instantiate(config.dataset)
     dataset = builder()
+    allowed_options = builder.options
+    logger.info(f"Allowed options: {', '.join(allowed_options)}")
     rich.print(dataset)
 
     # setting up OpenAI API
-    model = instantiate(config.model)
+    with open_dict(config):
+        config.model.template.options = allowed_options
+    model: Reasoner = instantiate(config.model)
     rich.print(model)
 
     output_dir = Path(os.getcwd()) / "output"
     output_dir.mkdir(exist_ok=True, parents=True)
 
     logger.info(f"Logging to {output_dir}")
-    rate_limit = 2
+    min_duration_per_question = 1.0 / config.rate_limit
+    logger.info(
+        f"Rate limit: {config.rate_limit}, Min. duration per question: {min_duration_per_question}"
+    )
     t0 = time.time()
     splits = list(dataset.keys())
     split_info = [f"{split} ({len(dataset[split])})" for split in splits]
     logger.info(f"Found splits: {', '.join(split_info)}")
-    results = {}
     for split in splits:
         dset = dataset[split]
         labels = []
@@ -56,24 +81,30 @@ def run(config: DictConfig) -> None:
         rgn = np.random.RandomState(0)
         rgn.shuffle(indices)
         for i, row_idx in (
-            pbar := tqdm(enumerate(indices), unit=" questions", total=len(indices))
+            pbar := tqdm(enumerate(indices), unit="question", total=len(indices))
         ) :
             row = dset[row_idx]
             question = row["question"]
             options = row["options"]
             answer_idx = row["answer"]
-            answer = string.ascii_uppercase[answer_idx]
+            answer = allowed_options[answer_idx]
 
-            model_answer, meta = model(question, options)
+            prediction, meta = model(question, options)
             try:
-                model_answer_idx = string.ascii_uppercase.index(model_answer)
+                prediction_idx = allowed_options.index(prediction)
             except Exception as exc:
-                logger.warning(f"{exc}")
-                model_answer_idx = -1
+                logger.warning(
+                    f"Prediction label couldn't be inferred "
+                    f"(prediction={prediction}, "
+                    f"allowed_options={allowed_options}, "
+                    f"answer={meta['answer']} ). "
+                    f"Exception: {exc}"
+                )
+                prediction_idx = -1
 
             # update the trackers
             labels.append(answer_idx)
-            preds.append(model_answer_idx)
+            preds.append(prediction_idx)
 
             # log the progress
             f1 = f1_score(labels, preds, average="macro")
@@ -81,37 +112,80 @@ def run(config: DictConfig) -> None:
             pbar.set_description(f"({split}) Acc: {acc:.2%} F1: {f1:.2%}")
 
             # write the result to file
-            with open(output_dir / f"{split}_{row_idx}.txt", "w") as f:
-                outcome = "correct" if model_answer == answer else "incorrect"
-                formatted_options = ",".join(
+            outcome = "correct" if prediction == answer else "incorrect"
+            with open(output_dir / f"{split}_{row_idx}_{outcome}.txt", "w") as f:
+                q_locator = f"{builder.name}:{split}:{row_idx}"
+                formatted_options = "\n".join(
                     [
-                        f"{string.ascii_uppercase[i]}) {option}"
+                        f"   {allowed_options[i]}) {option}"
                         for i, option in enumerate(options)
                     ]
                 )
-                output_str = f"""\
-                Outcome: {outcome}\n
-                Answer: {answer}: {options[answer_idx]}\n
-                Prediction: {model_answer}) {options[model_answer_idx]}\n\n\n
-                Question ({split}#{row_idx}): {question}\n
-                Options: {formatted_options}\n\n
-                Reasoning: \n{meta['completed_prompt']}
-                """
+                pred_str = (
+                    options[prediction_idx]
+                    if prediction_idx is not None and prediction_idx >= 0
+                    else "N/A"
+                )
+                output_str = (
+                    f"Outcome: {outcome}\n{SEPARATOR}\n"
+                    f"Answer: {answer}: {options[answer_idx]}\n"
+                    f"Prediction: {prediction}: {pred_str}\n{SEPARATOR}\n"
+                    f"Question [{q_locator}]:\n{question}\n\n"
+                    f"Options:\n{formatted_options}\n{SEPARATOR}\n"
+                    f"Reasoning: \n{meta['completed_prompt']}\n"
+                )
                 f.write(output_str)
 
-            if time.time() - t0 < rate_limit:
-                t = rate_limit - (time.time() - t0)
+            if time.time() - t0 < min_duration_per_question:
+                t = min_duration_per_question - (time.time() - t0)
                 time.sleep(max(t, 0))
             t0 = time.time()
 
-        results[split] = {
+        # register the results for the whole split
+        split_results = {
+            "dataset": builder.name,
+            "num_rows": len(dset),
+            "split": split,
             "accuracy": accuracy_score(labels, preds),
             "f1": f1_score(labels, preds, average="macro"),
+            "engine": model.engine,
+            "prompt_mode": model.prompt_mode,
         }
+        # write to file
+        with open(result_file.as_posix(), "a+") as f:
+            f.write(f"{json.dumps(split_results)}\n")
 
-    for split, accuracy in results.items():
-        logger.info(f">> {split}: {accuracy:.3%}")
+        # print results
+        with open(result_file.as_posix(), "r") as f:
+            all_results = [json.loads(line) for line in f.readlines()]
+        table = format_results(all_results)
+        rich.print(table)
+        rich.print(f">> Logged to {output_dir}")
+
     logger.info(f">> Logged to {output_dir}")
+
+
+def format_results(all_results) -> Table:
+    """Nicely display the results of the experiment using `rich.table.Table`."""
+    FMTS = {
+        "dataset": "<20",
+        "split": "<10",
+        "num_rows": "",
+        "accuracy": ".2%",
+        "f1": ".2%",
+        "engine": "<20",
+        "prompt_mode": "<20",
+    }
+
+    first_row = all_results[0]
+    keys = list(first_row.keys())
+    table = Table(title="Results")
+    for key in keys:
+        table.add_column(key, justify="center")
+    for record in all_results:
+        table.add_row(*[f"{record[key]:{FMTS[key]}}" for key in keys])
+
+    return table
 
 
 if __name__ == "__main__":

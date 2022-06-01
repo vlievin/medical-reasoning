@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import string
 from os import PathLike
 from typing import List
 from typing import Optional
@@ -39,13 +40,17 @@ class DatasetBuilder(object):
         cache_dir: Optional[PathLike] = None,
         splits: Optional[List[datasets.Split]] = None,
         subset: Optional[int] = None,
+        options: Optional[List] = None,
         **kwargs,
     ):
+        if isinstance(splits, str):
+            splits = [splits]
         self.name = name
         self.cache_dir = cache_dir
         self.splits = splits
         self.subset = subset
         self.kwargs = kwargs
+        self.options = options
 
     def __call__(self, *args, **kwargs) -> DatasetDict:
         dset_args = QA_DATASETS[self.name]
@@ -57,6 +62,22 @@ class DatasetBuilder(object):
         if self.name in QA_FORMATTERS:
             formatter = QA_FORMATTERS[self.name]()
             dataset = formatter(dataset)
+
+        # infer the options if they are not provided
+        if self.options is None:
+            n_options = set.union(
+                *[
+                    set([len(o) for o in dset["options"]])
+                    for split, dset in dataset.items()
+                ]
+            )
+            if len(n_options) != 1:
+                raise ValueError(
+                    f"All datasets must have the same number of options. "
+                    f"Got {n_options}"
+                )
+            n_options = list(n_options)[0]
+            self.options = string.ascii_uppercase[:n_options]
 
         # validate the data
         for split, dset in dataset.items():
@@ -99,7 +120,17 @@ class DatasetBuilder(object):
                 raise ValueError(
                     f"Invalid dataset: {self.name}: answer must be an integer"
                 )
-            if (answer < 0 and answer != -1) or answer >= len(row["options"]):
+
+            # check the number of options
+            n_options = len(row["options"])
+            if n_options != len(self.options):
+                raise ValueError(
+                    f"Invalid dataset: {self.name}: incorrect number of options. "
+                    f"Expected: {len(self.options)}, Found: {n_options}"
+                )
+
+            # check the answer idx
+            if (answer < 0 and answer != -1) or answer >= n_options:
                 raise ValueError(
                     f"Invalid dataset: {self.name}: answer must be "
                     f"-1 or in range [0, {len(row['options'])}). "

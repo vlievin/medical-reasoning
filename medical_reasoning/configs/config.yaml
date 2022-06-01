@@ -10,3 +10,9 @@ defaults:
     # enable color logging
   - override hydra/hydra_logging: colorlog
   - override hydra/job_logging: colorlog
+
+
+
+exp_id: ${dataset.name}-${model.engine}-${model.prompt_mode}
+rate_limit: 0.25
+print_config: true

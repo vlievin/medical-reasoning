@@ -51,19 +51,24 @@ class ChainOfThoughtTemplate(PromptTemplate, ABC):
 
 
 class MultipleChoiceTemplate(ChainOfThoughtTemplate):
-    zero_shot_prompt = "A: among A through D, the answer is "
+
     reasoning_prompt = "A: Let's think step by step like a medical expert."
     extractive_prompt = "Therefore, among A through D, the answer is "
+
+    @property
+    def zero_shot_prompt(self):
+        min_opt = self.options[0]
+        max_opt = self.options[-1]
+        return f"A: among {min_opt} through {max_opt}, the answer is "
 
     def __init__(self, options=None):
         if options is None:
             options = ["A", "B", "C", "D", "E"]
         self.options = options
 
-    @staticmethod
-    def format_question(question: str, options: List[str]) -> str:
+    def format_question(self, question: str, options: List[str]) -> str:
         formatted_options = [
-            f"{string.ascii_uppercase[i]}) {option}" for i, option in enumerate(options)
+            f"{self.options[i]}) {option}" for i, option in enumerate(options)
         ]
         return f"Q: {question}\n\n{LINE_BRAKE.join(formatted_options)}"
 

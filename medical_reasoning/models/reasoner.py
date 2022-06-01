@@ -57,6 +57,7 @@ class Reasoner(object):
         elif self.prompt_mode == "zero_shot":
             zero_shot_prompt = self.template.make_zero_shot_prompt(*args, **kwargs)
             zero_shot_answer = self._get_prompt_completion(zero_shot_prompt)
+            diagnostics["answer"] = zero_shot_answer.strip()
 
             # extract the answer and return
             answer = self.template.infer_answer(zero_shot_answer)

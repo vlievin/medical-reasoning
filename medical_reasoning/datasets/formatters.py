@@ -39,6 +39,8 @@ class ConvertHeadQA(object):
         r_index = row["ra"] - 1
         options = row["answers"]
         options = [x["atext"] for x in sorted(options, key=lambda x: x["aid"])]
+        if len(options) < 5:
+            options += [""] * (5 - len(options))
         return {"ra": r_index, "answers": options}
 
 
