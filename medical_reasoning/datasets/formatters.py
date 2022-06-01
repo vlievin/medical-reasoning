@@ -4,7 +4,10 @@ from typing import Dict
 import rich
 from datasets import Dataset
 from datasets import DatasetDict
+from datasets import Split
 from loguru import logger
+
+from medical_reasoning.datasets.utils.split_pubmed import split_pubmed
 
 
 class NestColumns(object):
@@ -23,7 +26,7 @@ class ConvertYesNoMaybe(object):
 
     def __call__(self, row: Dict) -> Dict:
         yesno_answer = row[self.input_column]
-        options = ["no", "yes", "maybe"]
+        options = ["yes", "no", "maybe"]
         answer = options.index(yesno_answer)
         return {"options": options, "answer": answer}
 
@@ -74,6 +77,25 @@ class MedMCQAFormatter(Formatter):
 
 
 class PubMedQAFormatter(Formatter):
+    def __call__(self, dataset: DatasetDict, **kwargs) -> DatasetDict:
+        dataset = self.exctract_splits(dataset)
+        return DatasetDict(
+            {split: self.format(dset) for split, dset in dataset.items()}
+        )
+
+    def exctract_splits(self, dataset: DatasetDict) -> DatasetDict:
+        assert set(dataset.keys()) == {Split.TRAIN}
+        dataset = dataset[Split.TRAIN]
+
+        train, valid, test = split_pubmed(dataset, 3)
+        return DatasetDict(
+            {
+                Split.TRAIN: train,
+                Split.VALIDATION: valid,
+                Split.TEST: test,
+            }
+        )
+
     def format(self, dataset: Dataset, **kwargs) -> Dataset:
         # convert the yes/no answer
         dataset = dataset.map(

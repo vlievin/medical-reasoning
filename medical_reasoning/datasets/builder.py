@@ -7,6 +7,7 @@ from typing import Optional
 
 import datasets
 import numpy as np
+import rich
 from datasets import Dataset
 from datasets import DatasetDict
 
@@ -41,6 +42,7 @@ class DatasetBuilder(object):
         splits: Optional[List[datasets.Split]] = None,
         subset: Optional[int] = None,
         options: Optional[List] = None,
+        is_final: bool = False,
         **kwargs,
     ):
         if isinstance(splits, str):
@@ -51,6 +53,7 @@ class DatasetBuilder(object):
         self.subset = subset
         self.kwargs = kwargs
         self.options = options
+        self.is_final = is_final
 
     def __call__(self, *args, **kwargs) -> DatasetDict:
         dset_args = QA_DATASETS[self.name]
@@ -77,7 +80,7 @@ class DatasetBuilder(object):
                     f"Got {n_options}"
                 )
             n_options = list(n_options)[0]
-            self.options = string.ascii_uppercase[:n_options]
+            self.options = [c for c in string.ascii_uppercase[:n_options]]
 
         # validate the data
         for split, dset in dataset.items():

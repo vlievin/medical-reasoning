@@ -59,7 +59,6 @@ def run(config: DictConfig) -> None:
     with open_dict(config):
         config.model.template.options = allowed_options
     model: Reasoner = instantiate(config.model)
-    rich.print(model)
 
     output_dir = Path(os.getcwd()) / "output"
     output_dir.mkdir(exist_ok=True, parents=True)
@@ -89,7 +88,7 @@ def run(config: DictConfig) -> None:
             answer_idx = row["answer"]
             answer = allowed_options[answer_idx]
 
-            prediction, meta = model(question, options)
+            prediction, meta = model(question, options=options)
             try:
                 prediction_idx = allowed_options.index(prediction)
             except Exception as exc:
@@ -144,8 +143,8 @@ def run(config: DictConfig) -> None:
         # register the results for the whole split
         split_results = {
             "dataset": builder.name,
-            "num_rows": len(dset),
-            "split": split,
+            "n_samples": len(dset),
+            "split": str(split),
             "accuracy": accuracy_score(labels, preds),
             "f1": f1_score(labels, preds, average="macro"),
             "engine": model.engine,
@@ -170,7 +169,7 @@ def format_results(all_results) -> Table:
     FMTS = {
         "dataset": "<20",
         "split": "<10",
-        "num_rows": "",
+        "n_samples": "",
         "accuracy": ".2%",
         "f1": ".2%",
         "engine": "<20",

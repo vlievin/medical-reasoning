@@ -1,14 +1,12 @@
 import os
 from typing import Any
 from typing import Dict
+from typing import List
 
 import openai
 from dotenv import load_dotenv
 
 from medical_reasoning.models.templates import ChainOfThoughtTemplate
-
-load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -35,11 +33,15 @@ class Reasoner(object):
             f"template={self.template})"
         )
 
-    def __call__(self, *args, **kwargs) -> (str, Dict[str, Any]):
+    def __call__(
+        self, *args, options: List[str] = None, **kwargs
+    ) -> (str, Dict[str, Any]):
         diagnostics = {}
         if self.prompt_mode == "chain_of_thought":
             # reasoning step
-            reasoning_prompt = self.template.make_reasoning_prompt(*args, **kwargs)
+            reasoning_prompt = self.template.make_reasoning_prompt(
+                *args, options=options, **kwargs
+            )
             reasoning_answer = self._get_prompt_completion(reasoning_prompt)
             completed_prompt = reasoning_prompt + reasoning_answer
             diagnostics["reasoning"] = reasoning_answer.strip()
@@ -51,16 +53,20 @@ class Reasoner(object):
             diagnostics["answer"] = extractive_answer.strip()
 
             # extract the answer and return
-            answer = self.template.infer_answer(extractive_answer)
+            answer = self.template.infer_answer(
+                extractive_answer, options=options, pre_answer=reasoning_answer
+            )
             diagnostics["completed_prompt"] = completed_prompt
             return answer, diagnostics
         elif self.prompt_mode == "zero_shot":
-            zero_shot_prompt = self.template.make_zero_shot_prompt(*args, **kwargs)
+            zero_shot_prompt = self.template.make_zero_shot_prompt(
+                *args, options=options, **kwargs
+            )
             zero_shot_answer = self._get_prompt_completion(zero_shot_prompt)
             diagnostics["answer"] = zero_shot_answer.strip()
 
             # extract the answer and return
-            answer = self.template.infer_answer(zero_shot_answer)
+            answer = self.template.infer_answer(zero_shot_answer, options=options)
             full_answer = zero_shot_prompt + zero_shot_answer
             diagnostics["completed_prompt"] = full_answer
             return answer, diagnostics
