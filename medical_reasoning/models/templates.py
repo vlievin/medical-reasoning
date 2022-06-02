@@ -55,7 +55,7 @@ class ChainOfThoughtTemplate(PromptTemplate, ABC):
         return f"{question_prompt}\n\n{self.reasoning_prompt}"
 
     def make_extractive_prompt(self, completed_prompt: str) -> str:
-        return f"{completed_prompt} {self.extractive_prompt}"
+        return f"{completed_prompt}\n\n{self.extractive_prompt}"
 
     def infer_answer(
         self,
@@ -68,12 +68,47 @@ class ChainOfThoughtTemplate(PromptTemplate, ABC):
 
 
 class MultipleChoiceTemplate(ChainOfThoughtTemplate):
-    reasoning_prompt = "A: Let's think step by step like a medical expert."
+    def __init__(
+        self,
+        options=None,
+        identity: str = "medical expert",
+    ):
+        if options is None:
+            options = ["A", "B", "C", "D", "E"]
+        self.options = options
+        if identity in ("none", "null"):
+            identity = None
+        if identity is not None:
+            identity = identity.replace("_", " ").strip()
+        self.identity = identity
+
+    @property
+    def reasoning_prompt(self):
+        prompt = "Answer: Let's think step by step"
+        if self.identity is not None:
+            prompt = f"{prompt} like a {self.identity}"
+        return f"{prompt}."
+
+    @property
+    def options_reasoning_prompt(self):
+        min_opt = self.options[0]
+        max_opt = self.options[-1]
+        prompt = f"Now, let's reflect on each option ({min_opt} through {max_opt})."
+        # prompt = f"Now, let's reflect on each option (from the least likely
+        # to the most likely option)."
+        # prompt = f"Now, let's eliminate options one-by-one until
+        # we find the correct one."
+        return prompt
+
+    def make_option_reasoning_prompt(self, completed_prompt: str) -> str:
+        return f"{completed_prompt}\n\n{self.options_reasoning_prompt}"
 
     @property
     def extractive_prompt(self):
         min_opt = self.options[0]
         max_opt = self.options[-1]
+        # return f"Therefore, all information considered,
+        # among {min_opt} through {max_opt}, the answer is"
         return f"Therefore, among {min_opt} through {max_opt}, the answer is"
 
     @property
@@ -82,16 +117,11 @@ class MultipleChoiceTemplate(ChainOfThoughtTemplate):
         max_opt = self.options[-1]
         return f"A: among {min_opt} through {max_opt}, the answer is"
 
-    def __init__(self, options=None):
-        if options is None:
-            options = ["A", "B", "C", "D", "E"]
-        self.options = options
-
     def format_question(self, question: str, options: List[str]) -> str:
         formatted_options = [
             f"{self.options[i]}) {option}" for i, option in enumerate(options)
         ]
-        return f"Q: {question}\n\n{LINE_BRAKE.join(formatted_options)}"
+        return f"Question: {question}\n\nAnswer options:\n{LINE_BRAKE.join(formatted_options)}"
 
     def infer_answer(
         self,
@@ -120,7 +150,6 @@ class MultipleChoiceTemplate(ChainOfThoughtTemplate):
             for o, o_ in zip(self.options, options)
         ]
         indices = list(filter(lambda x: len(x[1]), indices))
-        rich.print(f"--1--> {indices}")
         if len(indices):
             return min(indices, key=lambda x: x[1])[0]
         elif pre_answer is None:

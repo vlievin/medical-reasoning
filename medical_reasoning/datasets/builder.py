@@ -96,10 +96,11 @@ class DatasetBuilder(object):
         # sub-sample the dataset
         if self.subset is not None:
             new_dataset = {}
-            np.random.RandomState(0)
             for split, dset in dataset.items():
-                n = min(len(dset), self.subset)
-                indices = np.random.choice(len(dset), size=n, replace=False)
+                rgn = np.random.RandomState(0)
+                indices = list(range(len(dset)))
+                rgn.shuffle(indices)
+                indices = indices[: self.subset]
                 new_dataset[split] = dset.select(indices)
             dataset = DatasetDict(new_dataset)
 

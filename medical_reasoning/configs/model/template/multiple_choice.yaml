@@ -1,1 +1,2 @@
 _target_: medical_reasoning.models.templates.MultipleChoiceTemplate
+identity: "medical expert"

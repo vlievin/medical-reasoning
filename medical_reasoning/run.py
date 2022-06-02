@@ -43,10 +43,11 @@ def run(config: DictConfig) -> None:
 
     # setup the result file
     work_dir = config.sys.work_dir
+    data_file = Path("data.json")
     if hydra_config.mode == RunMode.MULTIRUN:
-        result_file = Path(work_dir) / hydra_config.sweep.dir / "results.json"
+        result_file = Path(work_dir) / hydra_config.sweep.dir / "results.jsonl"
     else:
-        result_file = Path(work_dir) / hydra_config.run.dir / "results.json"
+        result_file = Path(work_dir) / hydra_config.run.dir / "results.jsonl"
 
     # initialize the data module
     builder: DatasetBuilder = instantiate(config.dataset)
@@ -149,8 +150,22 @@ def run(config: DictConfig) -> None:
             "f1": f1_score(labels, preds, average="macro"),
             "engine": model.engine,
             "prompt_mode": model.prompt_mode,
+            "identity": str(model.template.identity),
         }
-        # write to file
+
+        # write data
+        with open(data_file.as_posix(), "w") as f:
+            f.write(
+                json.dumps(
+                    {
+                        **split_results,
+                        "labels": labels,
+                        "predictions": preds,
+                    }
+                )
+            )
+
+        # write all results to a shared file
         with open(result_file.as_posix(), "a+") as f:
             f.write(f"{json.dumps(split_results)}\n")
 
@@ -174,6 +189,7 @@ def format_results(all_results) -> Table:
         "f1": ".2%",
         "engine": "<20",
         "prompt_mode": "<20",
+        "identity": "<20",
     }
 
     first_row = all_results[0]

@@ -7,6 +7,7 @@ import openai
 from dotenv import load_dotenv
 
 from medical_reasoning.models.templates import ChainOfThoughtTemplate
+from medical_reasoning.models.templates import MultipleChoiceTemplate
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -23,7 +24,11 @@ class Reasoner(object):
         self.engine = engine
         self.template = template
         self.prompt_mode = prompt_mode
-        assert self.prompt_mode in {"chain_of_thought", "zero_shot"}
+        assert self.prompt_mode in {
+            "option_chain_of_thought",
+            "chain_of_thought",
+            "zero_shot",
+        }
 
     def __repr__(self):
         return (
@@ -45,6 +50,41 @@ class Reasoner(object):
             reasoning_answer = self._get_prompt_completion(reasoning_prompt)
             completed_prompt = reasoning_prompt + reasoning_answer
             diagnostics["reasoning"] = reasoning_answer.strip()
+
+            # extractive step
+            extractive_prompt = self.template.make_extractive_prompt(completed_prompt)
+            extractive_answer = self._get_prompt_completion(extractive_prompt)
+            completed_prompt = extractive_prompt + extractive_answer
+            diagnostics["answer"] = extractive_answer.strip()
+
+            # extract the answer and return
+            answer = self.template.infer_answer(
+                extractive_answer, options=options, pre_answer=reasoning_answer
+            )
+            diagnostics["completed_prompt"] = completed_prompt
+            return answer, diagnostics
+        elif self.prompt_mode == "option_chain_of_thought":
+            if not isinstance(self.template, MultipleChoiceTemplate):
+                raise TypeError(
+                    f"{self.prompt_mode} is only "
+                    f"compatible with MultipleChoiceTemplate"
+                )
+
+            # reasoning step
+            reasoning_prompt = self.template.make_reasoning_prompt(
+                *args, options=options, **kwargs
+            )
+            reasoning_answer = self._get_prompt_completion(reasoning_prompt)
+            completed_prompt = reasoning_prompt + reasoning_answer
+            diagnostics["reasoning"] = reasoning_answer.strip()
+
+            # option evaluation step
+            option_eval_prompt = self.template.make_option_reasoning_prompt(
+                completed_prompt
+            )
+            option_eval_answer = self._get_prompt_completion(option_eval_prompt)
+            completed_prompt = option_eval_prompt + option_eval_answer
+            diagnostics["option_eval"] = option_eval_answer.strip()
 
             # extractive step
             extractive_prompt = self.template.make_extractive_prompt(completed_prompt)

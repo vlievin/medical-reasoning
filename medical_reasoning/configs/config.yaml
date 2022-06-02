@@ -13,6 +13,6 @@ defaults:
 
 
 
-exp_id: ${dataset.name}-${model.engine}-${model.prompt_mode}
+exp_id: ${dataset.name}-${model.engine}-${model.prompt_mode}-${model.template.identity}
 rate_limit: 0.25
 print_config: true
