@@ -11,6 +11,8 @@ from typing import T
 import rich
 from loguru import logger
 
+from medical_reasoning.models.functional.infer_answer import infer_answer_from_choices
+
 LINE_BRAKE = "\n"
 
 
@@ -72,6 +74,7 @@ class MultipleChoiceTemplate(ChainOfThoughtTemplate):
         self,
         options=None,
         identity: str = "medical expert",
+        use_documents: bool = False,
     ):
         if options is None:
             options = ["A", "B", "C", "D", "E"]
@@ -81,12 +84,16 @@ class MultipleChoiceTemplate(ChainOfThoughtTemplate):
         if identity is not None:
             identity = identity.replace("_", " ").strip()
         self.identity = identity
+        self.use_documents = use_documents
 
     @property
     def reasoning_prompt(self):
+        min_opt = self.options[0]
+        max_opt = self.options[-1]
         prompt = "Answer: Let's think step by step"
         if self.identity is not None:
             prompt = f"{prompt} like a {self.identity}"
+        f"{prompt}  to arrive at one of the options {min_opt} through {max_opt}"  # todo
         return f"{prompt}."
 
     @property
@@ -117,11 +124,27 @@ class MultipleChoiceTemplate(ChainOfThoughtTemplate):
         max_opt = self.options[-1]
         return f"A: among {min_opt} through {max_opt}, the answer is"
 
-    def format_question(self, question: str, options: List[str]) -> str:
+    def format_question(
+        self,
+        question: str,
+        options: List[str],
+        documents: Optional[List] = None,
+        **kwargs,
+    ) -> str:
+        prompt = ""
+
+        if self.use_documents:
+            if documents is None:
+                raise ValueError("documents must be provided if use_documents is True")
+            formatted_documents = "\n".join(documents)
+            prompt += f"Context: {formatted_documents}\n\n"
+
         formatted_options = [
             f"{self.options[i]}) {option}" for i, option in enumerate(options)
         ]
-        return f"Question: {question}\n\nAnswer options:\n{LINE_BRAKE.join(formatted_options)}"
+        prompt += f"Question: {question}\n\nAnswer options:\n{LINE_BRAKE.join(formatted_options)}"
+
+        return prompt
 
     def infer_answer(
         self,
@@ -131,49 +154,9 @@ class MultipleChoiceTemplate(ChainOfThoughtTemplate):
         pre_answer: Optional[str] = None,
     ) -> None | str:
 
-        # step 1. Try to cache the options from `self.options`
-        indices = [(o, get_start_indices(prompt_answer, o)) for o in self.options]
-        indices = list(filter(lambda x: len(x[1]), indices))
-        if len(indices):
-            return min(indices, key=lambda x: x[1])[0]
-        elif options is None:
-            return None
-
-        # step 2. Try to cache the options from `options`
-        logger.debug(
-            f"> Inferring  labels from {self.options} failed. "
-            f"trying to match the provided options"
+        return infer_answer_from_choices(
+            prompt_answer,
+            options=options,
+            option_symbols=self.options,
+            pre_answer=pre_answer,
         )
-
-        indices = [
-            (o, get_start_indices(prompt_answer, o_))
-            for o, o_ in zip(self.options, options)
-        ]
-        indices = list(filter(lambda x: len(x[1]), indices))
-        if len(indices):
-            return min(indices, key=lambda x: x[1])[0]
-        elif pre_answer is None:
-            return None
-
-        # step 3. Try to catch a last mention of the answer in the pre-answer
-        logger.debug(
-            f"> Inferring  labels from {options} failed. "
-            f"trying to match the pre answer"
-        )
-        indices = [
-            (o, get_start_indices(pre_answer, o_))
-            for o, o_ in zip(self.options, options)
-        ]
-        indices = list(filter(lambda x: len(x[1]), indices))
-        if len(indices):
-            return max(indices, key=lambda x: x[1])[0]
-
-        indices = [(o, get_start_indices(prompt_answer, o)) for o in self.options]
-        indices = list(filter(lambda x: len(x[1]), indices))
-        if len(indices):
-            return max(indices, key=lambda x: x[1])[0]
-
-        logger.warning(f"Failed to match any answer ({prompt_answer})")
-        rich.print(f">> prompt_answer: {prompt_answer}")
-        rich.print(f">> pre_answer: {pre_answer}")
-        rich.print(f">> options: {options}")
