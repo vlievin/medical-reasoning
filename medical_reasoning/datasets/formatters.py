@@ -34,6 +34,7 @@ class ConvertYesNoMaybe(object):
 class FlattenPubmedqaContext(object):
     def __call__(self, row: Dict) -> Dict:
         documents = row["context"]["contexts"]
+        documents = ["\n".join(documents)]
         return {"documents": documents}
 
 

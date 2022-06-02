@@ -3,6 +3,7 @@
 defaults:
   - _self_
   - dataset: medqa_us
+  - index: none
   - model: ada
   - sys: local
   - hydra: default
@@ -13,6 +14,12 @@ defaults:
 
 
 
-exp_id: ${dataset.name}-${model.engine}-${model.prompt_mode}-${model.template.identity}
+exp_id: ${dataset.name}-${model.engine}-${model.prompt_mode}-${model.template.identity}${if:${use_documents},"-grounded",""}
+prompt_mode: "chain_of_thought"
+identity: "medical_expert"
+use_documents: false
+
+# technicals
 rate_limit: 0.25
 print_config: true
+disable_caching: false

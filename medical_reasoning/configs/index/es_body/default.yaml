@@ -1,0 +1,38 @@
+# defining a mapping will help: (1) optimize the performance, (2) save disk space
+mappings:
+  properties:
+    text:
+      type: text
+    title:
+      type: text
+settings:
+  # Defines changes to the text before tokenization and indexing
+  analysis:
+    analyzer:
+      custom_analyzer:
+        # token filters
+        filter:
+          - lowercase # Converts tokens to lowercase
+          - stop # Removes tokens equivalent to english stopwords
+          - asciifolding # Converts a-z, 1-9, and symbolic characters to their ASCII equivalent
+          - my_snow # Converts tokens to its root word based snowball stemming
+        tokenizer: standard
+        type: custom
+    filter:
+      my_snow:
+        language: English
+        type: snowball
+  # Replicas are copies of the shards and provide reliability if a node is lost
+  number_of_replicas: 0
+  # Shards are used to parallelize work on an index
+  number_of_shards: 1
+  similarity:
+    default:
+      # texts which touch on several topics often benefit by choosing a larger b
+      # most experiments seem to show the optimal b to be in a range of 0.3-0.9
+      b: 0.75
+      # should generally trend toward larger numbers when the text is a long and diverse
+      # most experiments seem to show the optimal k1 to be in a range of 0.5-2.0
+      k1: 1.2
+      # By default, b has a value of 0.75 and k1 a value of 1.2
+      type: BM25

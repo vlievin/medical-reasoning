@@ -5,6 +5,7 @@ import string
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 import datasets
 import hydra
@@ -15,6 +16,7 @@ from hydra.types import RunMode
 from hydra.utils import instantiate
 from loguru import logger
 from omegaconf import DictConfig
+from omegaconf import OmegaConf
 from omegaconf import open_dict
 from rich.table import Table
 from sklearn.metrics import accuracy_score
@@ -22,10 +24,14 @@ from sklearn.metrics import f1_score
 from tqdm import tqdm
 
 from medical_reasoning.datasets import DatasetBuilder
+from medical_reasoning.indexes import ElasticsearchIndex
 from medical_reasoning.models import Reasoner
 from medical_reasoning.utils.config import print_config
 
 SEPARATOR = "-" * 80 + "\n"
+
+
+OmegaConf.register_new_resolver("if", lambda x, y, z: y if x else z)
 
 
 @hydra.main(
@@ -35,7 +41,8 @@ SEPARATOR = "-" * 80 + "\n"
 )
 def run(config: DictConfig) -> None:
     hydra_config = HydraConfig().get()
-    # datasets.disable_caching()
+    if config.disable_caching:
+        datasets.disable_caching()
     logging.getLogger("openai").setLevel(logging.WARNING)
     datasets.logging.set_verbosity(datasets.logging.ERROR)
     if config.print_config:
@@ -55,6 +62,10 @@ def run(config: DictConfig) -> None:
     allowed_options = builder.options
     logger.info(f"Allowed options: {', '.join(allowed_options)}")
     rich.print(dataset)
+
+    # setup the index
+    index: Optional[ElasticsearchIndex] = instantiate(config.index)
+    rich.print(index)
 
     # setting up OpenAI API
     with open_dict(config):
@@ -88,8 +99,8 @@ def run(config: DictConfig) -> None:
             options = row["options"]
             answer_idx = row["answer"]
             answer = allowed_options[answer_idx]
-
-            prediction, meta = model(question, options=options)
+            documents = row.get("documents", [])
+            prediction, meta = model(question, options=options, documents=documents)
             try:
                 prediction_idx = allowed_options.index(prediction)
             except Exception as exc:
