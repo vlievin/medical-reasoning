@@ -10,6 +10,8 @@ import datasets
 import rich
 from elasticsearch import Elasticsearch
 from loguru import logger
+from omegaconf import OmegaConf
+from tqdm import tqdm
 
 from medical_reasoning.indexes.utils.elasticsearch import es_create_index
 from medical_reasoning.indexes.utils.elasticsearch import es_ingest_bulk
@@ -67,7 +69,7 @@ class ElasticsearchIndex(object):
         dataset="wikipedia",
         name="20220301.en",
         subset: Optional[int] = None,
-        ingest_bs: int = 1000,
+        ingest_bs: int = 10_000,
         cache_dir: Optional[str] = None,
         num_proc: int = 4,
         title_boost_weight: float = 1.0,
@@ -77,16 +79,16 @@ class ElasticsearchIndex(object):
     ):
         self.title_boost_weight = title_boost_weight
         # process the dataset
-        wiki = datasets.load_dataset(dataset, name, cache_dir=cache_dir)
-        wiki = datasets.concatenate_datasets(list(wiki.values()))
+        corpus = datasets.load_dataset(dataset, name, cache_dir=cache_dir)
+        corpus = datasets.concatenate_datasets(list(corpus.values()))
         if subset is not None:
-            wiki = wiki.select(list(range(subset)))
-            wiki._fingerprint = f"{wiki._fingerprint}-s{subset}"
+            corpus = corpus.select(list(range(subset)))
+            corpus._fingerprint = f"{corpus._fingerprint}-s{subset}"
         # generate passages
         pipe = GeneratePassages(
             passage_length=passage_length, passage_stride=passage_stride
         )
-        wiki = wiki.map(
+        corpus = corpus.map(
             pipe,
             batched=True,
             num_proc=num_proc,
@@ -94,14 +96,17 @@ class ElasticsearchIndex(object):
             batch_size=10,
         )
         # define the index name
-        es_body_hash = hash(json.dumps(es_body))
-        self.index_name = f"wikipedia-20220301.en-{wiki._fingerprint}-{es_body_hash}"
+        es_body = OmegaConf.to_container(es_body)
+        self.index_name = f"wikipedia-20220301.en-{corpus._fingerprint}"
         # maybe create the index
         newly_created = es_create_index(self.instance, self.index_name, body=es_body)
         if newly_created:
             try:
-                for i in range(0, len(wiki), ingest_bs):
-                    batch = wiki[i : i + ingest_bs]
+                for i in tqdm(
+                    range(0, len(corpus), ingest_bs),
+                    desc=f"Indexing {dataset} with Elasticsearch",
+                ):
+                    batch = corpus[i : i + ingest_bs]
                     es_ingest_bulk(
                         self.instance,
                         self.index_name,

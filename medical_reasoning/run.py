@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import socket
 import string
 import sys
 import time
@@ -32,6 +33,9 @@ SEPARATOR = "-" * 80 + "\n"
 
 
 OmegaConf.register_new_resolver("if", lambda x, y, z: y if x else z)
+OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
+OmegaConf.register_new_resolver("getcwd", os.getcwd)
+OmegaConf.register_new_resolver("hostname", socket.gethostname)
 
 
 @hydra.main(
@@ -44,6 +48,7 @@ def run(config: DictConfig) -> None:
     if config.disable_caching:
         datasets.disable_caching()
     logging.getLogger("openai").setLevel(logging.WARNING)
+    logging.getLogger("elasticsearch").setLevel(logging.WARNING)
     datasets.logging.set_verbosity(datasets.logging.ERROR)
     if config.print_config:
         print_config(config)
@@ -65,7 +70,6 @@ def run(config: DictConfig) -> None:
 
     # setup the index
     index: Optional[ElasticsearchIndex] = instantiate(config.index)
-    rich.print(index)
 
     # setting up OpenAI API
     with open_dict(config):
@@ -100,6 +104,12 @@ def run(config: DictConfig) -> None:
             answer_idx = row["answer"]
             answer = allowed_options[answer_idx]
             documents = row.get("documents", [])
+            if len(documents) == 0 and index is not None:
+                documents = sample_documents(index, question, options, config=config)
+
+            rich.print(documents)
+            exit()
+
             prediction, meta = model(question, options=options, documents=documents)
             try:
                 prediction_idx = allowed_options.index(prediction)
@@ -188,6 +198,26 @@ def run(config: DictConfig) -> None:
         rich.print(f">> Logged to {output_dir}")
 
     logger.info(f">> Logged to {output_dir}")
+
+
+def sample_documents(index, question, options, *, config):
+    queries = [f"{o} {question}" for o in options]
+    rich.print(f">> Queries: {queries}")
+    qtitles = options
+    results = index(queries, qtitles, k=config.topk)
+    rich.print(results)
+    documents = []
+    assert (
+        len(
+            results["text"],
+        )
+        == len(results["title"])
+    )
+    for x, y in zip(results["text"], results["title"]):
+        assert len(x) == len(y)
+        for xx, yy in zip(x, y):
+            documents.append(f"Title: {yy}. {xx}")
+    return documents
 
 
 def format_results(all_results) -> Table:

@@ -88,12 +88,13 @@ class MultipleChoiceTemplate(ChainOfThoughtTemplate):
 
     @property
     def reasoning_prompt(self):
-        min_opt = self.options[0]
-        max_opt = self.options[-1]
+        # min_opt = self.options[0]
+        # max_opt = self.options[-1]
         prompt = "Answer: Let's think step by step"
         if self.identity is not None:
             prompt = f"{prompt} like a {self.identity}"
-        f"{prompt}  to arrive at one of the options {min_opt} through {max_opt}"  # todo
+        # prompt = f"{prompt} to arrive at one of the options {min_opt}
+        # through {max_opt}"  # todo 46%
         return f"{prompt}."
 
     @property

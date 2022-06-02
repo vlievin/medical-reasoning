@@ -53,7 +53,9 @@ class Reasoner(object):
 
             # extractive step
             extractive_prompt = self.template.make_extractive_prompt(completed_prompt)
-            extractive_answer = self._get_prompt_completion(extractive_prompt)
+            extractive_answer = self._get_prompt_completion(
+                extractive_prompt, stop=[*self.template.options, ["<|endoftext|>"]]
+            )
             completed_prompt = extractive_prompt + extractive_answer
             diagnostics["answer"] = extractive_answer.strip()
 
@@ -88,7 +90,9 @@ class Reasoner(object):
 
             # extractive step
             extractive_prompt = self.template.make_extractive_prompt(completed_prompt)
-            extractive_answer = self._get_prompt_completion(extractive_prompt)
+            extractive_answer = self._get_prompt_completion(
+                extractive_prompt, stop=[*self.template.options, ["<|endoftext|>"]]
+            )
             completed_prompt = extractive_prompt + extractive_answer
             diagnostics["answer"] = extractive_answer.strip()
 
@@ -113,17 +117,17 @@ class Reasoner(object):
         else:
             raise ValueError(f"Unknown prompt mode: {self.prompt_mode}")
 
-    def _get_prompt_completion(self, prompt) -> str:
+    def _get_prompt_completion(self, prompt, stop=["<|endoftext|>"]) -> str:
         response = openai.Completion.create(
             engine=self.engine,
             prompt=prompt,
-            temperature=0,
-            max_tokens=300,
+            temperature=0,  # todo: increase
+            # max_tokens=512,
             top_p=1,
-            logprobs=5,
+            # logprobs=5,
             frequency_penalty=0.0,
             presence_penalty=0.0,
-            stop=["<|endoftext|>"],
+            stop=stop,
         )
         completion = response["choices"][0]["text"]
         return completion.split("<|endoftext|>")[0]

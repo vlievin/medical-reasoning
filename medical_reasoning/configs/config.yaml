@@ -18,6 +18,7 @@ exp_id: ${dataset.name}-${model.engine}-${model.prompt_mode}-${model.template.id
 prompt_mode: "chain_of_thought"
 identity: "medical_expert"
 use_documents: false
+topk: 1
 
 # technicals
 rate_limit: 0.25
