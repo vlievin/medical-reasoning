@@ -5,7 +5,9 @@ import socket
 import time
 import warnings
 from pathlib import Path
+from typing import Any
 from typing import Dict
+from typing import List
 from typing import Optional
 
 import datasets
@@ -112,7 +114,7 @@ def run(config: DictConfig) -> None:
     json.dump(dataset_stats, Path("dataset_stats.json").open("w"), indent=2)
 
     # initialize the dataset used for the shots
-    make_shots_dataset(config)
+    shots_dataset = make_shots_dataset(config)
 
     # setup the index
     if config.use_documents:
@@ -149,16 +151,19 @@ def run(config: DictConfig) -> None:
         ) :
 
             # get the row of data, validate and potentially sample documents
-            row = dset[row_idx]
-            eg = Example(**row, allowed_options=allowed_options)
-            if len(eg.documents) == 0 and index is not None:
-                eg = sample_documents(eg, index=index, config=config)
+            eg = make_eg(dset[row_idx], allowed_options, index=index, config=config)
+
+            # samples the shots
+            shots = make_shots_egs(
+                shots_dataset, row_idx, allowed_options, index=index, config=config
+            )
 
             # process the Example with the model
-            prediction_str, meta = model(
-                eg.question, options=eg.options, documents=eg.documents
-            )
+            prediction_str, meta = model(eg, shots=shots)
             pred = Prediction(prediction_str=prediction_str, example=eg, meta=meta)
+            rich.print(f"{' completed prompt ':=^80}")
+            rich.print(meta["completed_prompt"])
+            # exit()
 
             # update the trackers
             labels.append(eg.answer_idx)
@@ -223,7 +228,49 @@ def run(config: DictConfig) -> None:
     logger.info(f">> Logged to {output_dir}")
 
 
-def make_shots_dataset(config) -> Dataset:
+def make_shots_egs(
+    shots_dataset: Dataset,
+    row_idx: int,
+    allowed_options: List,
+    *,
+    index: Optional[ElasticsearchIndex],
+    config: DictConfig,
+) -> List[Example]:
+    """Sample a bunch of Examples from the Shots dataset."""
+    shots = []
+    if config.shots > 0:
+        rgn = np.random.RandomState(row_idx)
+        shots_indices = rgn.choice(
+            list(range(len(shots_dataset))), size=config.shots, replace=False
+        )
+        for j in shots_indices:
+            shots.append(
+                make_eg(
+                    shots_dataset[int(j)], allowed_options, index=index, config=config
+                )
+            )
+
+    return shots
+
+
+def make_eg(
+    row: Dict[str, Any],
+    allowed_options: List,
+    *,
+    index: Optional[ElasticsearchIndex],
+    config: DictConfig,
+) -> Example:
+    """Make an example from a row of data. Potentially sample the index."""
+    eg = Example(**row, allowed_options=allowed_options)
+    if len(eg.documents) == 0 and index is not None:
+        eg = sample_documents(eg, index=index, config=config)
+    return eg
+
+
+def make_shots_dataset(config, percentiles=None) -> Dataset:
+    """Build the dataset used to draw shots from."""
+    if percentiles is None:
+        percentiles = [50, 90]
     shots_builder: DatasetBuilder = instantiate(
         config.dataset,
         splits="train",
@@ -232,11 +279,15 @@ def make_shots_dataset(config) -> Dataset:
     shots_dataset = shots_builder()
     shots_dataset = shots_dataset["train"]
     rich.print(f"Shots Dataset:\n{shots_dataset}")
-    stats = DatasetStats(percentiles=[50, 99])
+    stats = DatasetStats(percentiles=percentiles)
     shots_stats = stats(shots_dataset)
     # take the training split and use only the reasonings in percentiles [50, 95]
-    min_length = int(shots_stats["reasoning"]["words"]["percentiles"]["50"])
-    max_length = int(shots_stats["reasoning"]["words"]["percentiles"]["99"])
+    min_length = int(
+        shots_stats["reasoning"]["words"]["percentiles"][str(percentiles[0])]
+    )
+    max_length = int(
+        shots_stats["reasoning"]["words"]["percentiles"][str(percentiles[1])]
+    )
     pipe = FilterByLength("reasoning", min_length=min_length, max_length=max_length)
     shots_dataset = shots_dataset.filter(
         pipe,
@@ -272,6 +323,7 @@ def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConf
 
 
 def format_prediction(eg: Example, pred: Prediction, q_locator: str) -> str:
+    """Format the prediction for a given example."""
     formatted_options = "\n".join(
         [f"   {eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)]
     )
@@ -287,8 +339,8 @@ def format_prediction(eg: Example, pred: Prediction, q_locator: str) -> str:
 
 
 def format_results(all_results) -> Table:
-    """Nicely display the results of the experiment using `rich.table.Table`."""
-    FMTS = {
+    """Format the results of the experiment using `rich.table.Table`."""
+    COLUMN_FORMATS = {
         "dataset": "<20",
         "split": "<10",
         "n_samples": "",
@@ -307,7 +359,7 @@ def format_results(all_results) -> Table:
     for key in keys:
         table.add_column(key, justify="center")
     for record in all_results:
-        table.add_row(*[f"{record[key]:{FMTS[key]}}" for key in keys])
+        table.add_row(*[f"{record[key]:{COLUMN_FORMATS[key]}}" for key in keys])
 
     return table
 

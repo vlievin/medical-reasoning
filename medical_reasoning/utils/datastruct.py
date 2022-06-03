@@ -15,6 +15,7 @@ class Example(BaseModel):
     question: str
     options: List[str]
     documents: List[str] = None
+    reasoning: Optional[str] = None
     allowed_options: List[str]
     answer_idx: int
     question_clean: Optional[str] = None
@@ -77,7 +78,7 @@ class Prediction(BaseModel):
 
     @property
     def full(self):
-        return self.prediction_str
+        return self.example.options[self.idx]
 
     @property
     def outcome(self):

@@ -10,6 +10,10 @@ from medical_reasoning.models.functional.infer_answer import infer_answer_from_c
 
 @parameterized([
     ("A) ...", "reasoning", ["A", "B"], ["_option_A_", "_option_B_"], "A"),
+    ("A, ...", "reasoning", ["A", "B"], ["_option_A_", "_option_B_"], "A"),
+    ("A: ...", "reasoning", ["A", "B"], ["_option_A_", "_option_B_"], "A"),
+    ("A. ...", "reasoning", ["A", "B"], ["_option_A_", "_option_B_"], "A"),
+    ("A ...", "reasoning", ["A", "B"], ["_option_A_", "_option_B_"], "A"),
     ("B) ...", "reasoning", ["A", "B"], ["_option_A_", "_option_B_"], "B"),
     ("Belgium A) ...", "reasoning", ["A", "B"], ["_option_A_", "_option_B_"], "A"),
     ("Africa B) ...", "reasoning", ["A", "B"], ["_option_A_", "_option_B_"], "B"),

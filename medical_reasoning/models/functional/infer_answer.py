@@ -40,7 +40,7 @@ def infer_answer_from_choices(
     pre_answer: Optional[str] = None,
 ) -> None | str:
     # make the regex patterns for the option symbols
-    option_symbols_re = [rf"{o}(\)|:|\.| )" for o in option_symbols]
+    option_symbols_re = [rf"{o}(\)|:|\.|,| )" for o in option_symbols]
 
     # step 1. Try to cache the options from `self.options`
     match = get_first_match(
