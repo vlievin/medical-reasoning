@@ -39,9 +39,12 @@ def infer_answer_from_choices(
     options: Optional[List] = None,
     pre_answer: Optional[str] = None,
 ) -> None | str:
+    # make the regex patterns for the option symbols
+    option_symbols_re = [rf"{o}(\)|:|\.| )" for o in option_symbols]
+
     # step 1. Try to cache the options from `self.options`
     match = get_first_match(
-        prompt_answer, choices=option_symbols, keys=option_symbols, op=min
+        prompt_answer, choices=option_symbols_re, keys=option_symbols, op=min
     )
     if match is not None:
         return match
@@ -66,7 +69,7 @@ def infer_answer_from_choices(
         return match
 
     match = get_first_match(
-        pre_answer, choices=option_symbols, keys=option_symbols, op=max
+        pre_answer, choices=option_symbols_re, keys=option_symbols, op=max
     )
     if match is not None:
         return match
