@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from copy import copy
 from typing import Any
@@ -8,8 +10,11 @@ from typing import Optional
 
 import datasets
 import rich
+from datasets import DatasetDict
 from elasticsearch import Elasticsearch
+from hydra.utils import instantiate
 from loguru import logger
+from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
@@ -66,11 +71,9 @@ class ElasticsearchIndex(object):
     def __init__(
         self,
         *,
-        dataset="wikipedia",
-        name="20220301.en",
+        corpus: DictConfig | DatasetDict,
         subset: Optional[int] = None,
         ingest_bs: int = 10_000,
-        cache_dir: Optional[str] = None,
         num_proc: int = 4,
         title_boost_weight: float = 1.0,
         passage_length: int = 100,
@@ -79,7 +82,8 @@ class ElasticsearchIndex(object):
     ):
         self.title_boost_weight = title_boost_weight
         # process the dataset
-        corpus = datasets.load_dataset(dataset, name, cache_dir=cache_dir)
+        if isinstance(corpus, DictConfig):
+            corpus: DatasetDict = instantiate(corpus)
         corpus = datasets.concatenate_datasets(list(corpus.values()))
         if subset is not None:
             corpus = corpus.select(list(range(subset)))
@@ -104,7 +108,7 @@ class ElasticsearchIndex(object):
             try:
                 for i in tqdm(
                     range(0, len(corpus), ingest_bs),
-                    desc=f"Indexing {dataset} with Elasticsearch",
+                    desc=f"Indexing {corpus._fingerprint} with Elasticsearch",
                 ):
                     batch = corpus[i : i + ingest_bs]
                     es_ingest_bulk(

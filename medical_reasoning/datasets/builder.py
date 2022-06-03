@@ -30,7 +30,7 @@ QA_FORMATTERS = {
     "medmcqa": MedMCQAFormatter,
 }
 
-REQUIRED_COLUMNS = ["question", "options", "answer"]
+REQUIRED_COLUMNS = ["question", "options", "answer_idx"]
 
 
 class DatasetBuilder(object):
@@ -119,8 +119,8 @@ class DatasetBuilder(object):
 
         for i in range(len(dset))[:100]:
             row = dset[i]
-            answer = row["answer"]
-            if not isinstance(answer, int):
+            answer_idx = row["answer_idx"]
+            if not isinstance(answer_idx, int):
                 raise ValueError(
                     f"Invalid dataset: {self.name}: answer must be an integer"
                 )
@@ -134,11 +134,11 @@ class DatasetBuilder(object):
                 )
 
             # check the answer idx
-            if (answer < 0 and answer != -1) or answer >= n_options:
+            if (answer_idx < 0 and answer_idx != -1) or answer_idx >= n_options:
                 raise ValueError(
                     f"Invalid dataset: {self.name}: answer must be "
                     f"-1 or in range [0, {len(row['options'])}). "
-                    f"Got {answer}"
+                    f"Got {answer_idx}"
                 )
 
         return True

@@ -2,8 +2,6 @@ import json
 import logging
 import os
 import socket
-import string
-import sys
 import time
 from pathlib import Path
 from typing import Optional
@@ -28,9 +26,10 @@ from medical_reasoning.datasets import DatasetBuilder
 from medical_reasoning.indexes import ElasticsearchIndex
 from medical_reasoning.models import Reasoner
 from medical_reasoning.utils.config import print_config
+from medical_reasoning.utils.datastruct import Example
+from medical_reasoning.utils.datastruct import Prediction
 
 SEPARATOR = "-" * 80 + "\n"
-
 
 OmegaConf.register_new_resolver("if", lambda x, y, z: y if x else z)
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
@@ -103,31 +102,22 @@ def run(config: DictConfig) -> None:
         for i, row_idx in (
             pbar := tqdm(enumerate(indices), unit="question", total=len(indices))
         ) :
-            row = dset[row_idx]
-            question = row["question"]
-            options = row["options"]
-            answer_idx = row["answer"]
-            answer = allowed_options[answer_idx]
-            documents = row.get("documents", [])
-            if len(documents) == 0 and index is not None:
-                documents = sample_documents(index, question, options, config=config)
 
-            prediction, meta = model(question, options=options, documents=documents)
-            try:
-                prediction_idx = allowed_options.index(prediction)
-            except Exception as exc:
-                logger.warning(
-                    f"Prediction label couldn't be inferred "
-                    f"(prediction={prediction}, "
-                    f"allowed_options={allowed_options}, "
-                    f"answer={meta['answer']} ). "
-                    f"Exception: {exc}"
-                )
-                prediction_idx = -1
+            # get the row of data, validate and potentially sample documents
+            row = dset[row_idx]
+            eg = Example(**row, allowed_options=allowed_options)
+            if len(eg.documents) == 0 and index is not None:
+                eg = sample_documents(eg, index=index, config=config)
+
+            # process the Example with the model
+            prediction_str, meta = model(
+                eg.question, options=eg.options, documents=eg.documents
+            )
+            pred = Prediction(prediction_str=prediction_str, example=eg, meta=meta)
 
             # update the trackers
-            labels.append(answer_idx)
-            preds.append(prediction_idx)
+            labels.append(eg.answer_idx)
+            preds.append(pred.idx)
 
             # log the progress
             f1 = f1_score(labels, preds, average="macro")
@@ -135,30 +125,12 @@ def run(config: DictConfig) -> None:
             pbar.set_description(f"({split}) Acc: {acc:.2%} F1: {f1:.2%}")
 
             # write the result to file
-            outcome = "correct" if prediction == answer else "incorrect"
-            with open(output_dir / f"{split}_{row_idx}_{outcome}.txt", "w") as f:
-                q_locator = f"{builder.name}:{split}:{row_idx}"
-                formatted_options = "\n".join(
-                    [
-                        f"   {allowed_options[i]}) {option}"
-                        for i, option in enumerate(options)
-                    ]
-                )
-                pred_str = (
-                    options[prediction_idx]
-                    if prediction_idx is not None and prediction_idx >= 0
-                    else "N/A"
-                )
-                output_str = (
-                    f"Outcome: {outcome}\n{SEPARATOR}\n"
-                    f"Answer: {answer}: {options[answer_idx]}\n"
-                    f"Prediction: {prediction}: {pred_str}\n{SEPARATOR}\n"
-                    f"Question [{q_locator}]:\n{question}\n\n"
-                    f"Options:\n{formatted_options}\n{SEPARATOR}\n"
-                    f"Reasoning: \n{meta['completed_prompt']}\n"
-                )
+            q_locator = f"{builder.name}_{split}_{row_idx}"
+            output_str = format_prediction(eg, pred, q_locator)
+            with open(output_dir / f"{q_locator}_{pred.outcome}.txt", "w") as f:
                 f.write(output_str)
 
+            # throttle the API
             if time.time() - t0 < min_duration_per_question:
                 t = min_duration_per_question - (time.time() - t0)
                 time.sleep(max(t, 0))
@@ -174,7 +146,7 @@ def run(config: DictConfig) -> None:
             "engine": model.engine,
             "prompt_mode": model.prompt_mode,
             "identity": str(model.template.identity),
-            "grounded": str(config.use_documents)
+            "grounded": str(config.use_documents),
         }
 
         # write data
@@ -203,24 +175,36 @@ def run(config: DictConfig) -> None:
     logger.info(f">> Logged to {output_dir}")
 
 
-def sample_documents(index, question, options, *, config):
-    queries = [f"{o} {question}" for o in options]
-    # rich.print(f">> Queries: {queries}")
-    qtitles = options
-    results = index(queries, qtitles, k=config.topk)
-    # rich.print(results)
-    documents = []
-    assert (
-        len(
-            results["text"],
-        )
-        == len(results["title"])
+def format_prediction(eg: Example, pred: Prediction, q_locator: str) -> str:
+    formatted_options = "\n".join(
+        [f"   {eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)]
     )
+    output_str = (
+        f"Outcome: {pred.outcome}\n{SEPARATOR}\n"
+        f"Answer: {eg.answer}: {eg.options[eg.answer_idx]}\n"
+        f"Prediction: {pred.label}: {pred.full}\n{SEPARATOR}\n"
+        f"Question [{q_locator}]:\n{eg.question}\n\n"
+        f"Options:\n{formatted_options}\n{SEPARATOR}\n"
+        f"Reasoning: \n{pred.meta['completed_prompt']}\n"
+    )
+    return output_str
+
+
+def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConfig):
+    """Sample the documents for a given example."""
+    queries = [f"{o} {eg.question}" for o in eg.options]
+    results = index(queries, eg.options, k=config.topk)
+    documents = []
+    if len(results["text"]) != len(results["title"]):
+        raise ValueError("text and title must be of the same length")
+
     for x, y in zip(results["text"], results["title"]):
-        assert len(x) == len(y)
+        if len(x) != len(y):
+            raise ValueError("text and title must be of the same number of results")
         for xx, yy in zip(x, y):
             documents.append(f"Title: {yy}. {xx}")
-    return documents
+
+    return eg.copy(update={"documents": documents})
 
 
 def format_results(all_results) -> Table:
@@ -234,7 +218,7 @@ def format_results(all_results) -> Table:
         "engine": "<20",
         "prompt_mode": "<20",
         "identity": "<20",
-        "grounded" : "<16"
+        "grounded": "<16",
     }
 
     first_row = all_results[0]

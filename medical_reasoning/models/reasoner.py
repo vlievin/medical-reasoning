@@ -4,6 +4,7 @@ from typing import Dict
 from typing import List
 
 import openai
+import rich
 from dotenv import load_dotenv
 
 from medical_reasoning.models.templates import ChainOfThoughtTemplate
@@ -54,7 +55,9 @@ class Reasoner(object):
             # extractive step
             extractive_prompt = self.template.make_extractive_prompt(completed_prompt)
             extractive_answer = self._get_prompt_completion(
-                extractive_prompt, stop=["<|endoftext|>"], max_tokens=32,
+                extractive_prompt,
+                stop=["<|endoftext|>"],
+                max_tokens=32,
             )
             completed_prompt = extractive_prompt + extractive_answer
             diagnostics["answer"] = extractive_answer.strip()
@@ -91,7 +94,8 @@ class Reasoner(object):
             # extractive step
             extractive_prompt = self.template.make_extractive_prompt(completed_prompt)
             extractive_answer = self._get_prompt_completion(
-                extractive_prompt, max_tokens=32,
+                extractive_prompt,
+                max_tokens=32,
             )
             completed_prompt = extractive_prompt + extractive_answer
             diagnostics["answer"] = extractive_answer.strip()
@@ -117,7 +121,11 @@ class Reasoner(object):
         else:
             raise ValueError(f"Unknown prompt mode: {self.prompt_mode}")
 
-    def _get_prompt_completion(self, prompt, stop="<|endoftext|>", max_tokens=512) -> str:
+    def _get_prompt_completion(
+        self, prompt, stop="<|endoftext|>", max_tokens=512
+    ) -> str:
+        if self.engine == "dryrun":
+            return "\n<GPT-3-answer>\n"
         response = openai.Completion.create(
             engine=self.engine,
             prompt=prompt,

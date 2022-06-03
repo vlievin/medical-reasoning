@@ -28,7 +28,7 @@ class ConvertYesNoMaybe(object):
         yesno_answer = row[self.input_column]
         options = ["yes", "no", "maybe"]
         answer = options.index(yesno_answer)
-        return {"options": options, "answer": answer}
+        return {"options": options, "answer_idx": answer}
 
 
 class FlattenPubmedqaContext(object):
@@ -69,7 +69,7 @@ class MedMCQAFormatter(Formatter):
         )
         dataset = dataset.rename_columns(
             {
-                "cop": "answer",
+                "cop": "answer_idx",
             }
         )
         dataset = dataset.remove_columns(["opa", "opb", "opc", "opd"])
@@ -124,7 +124,7 @@ class HeadQAFormatter(Formatter):
         dataset = dataset.rename_columns(
             {
                 "qtext": "question",
-                "ra": "answer",
+                "ra": "answer_idx",
                 "answers": "options",
             }
         )

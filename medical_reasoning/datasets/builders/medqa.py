@@ -91,8 +91,8 @@ class MedQA(datasets.GeneratorBasedBuilder):
                 {
                     "idx": datasets.Value("int32"),
                     "question": datasets.Value("string"),
-                    "metamap": datasets.Value("string"),
-                    "answer": datasets.Value("int32"),
+                    "question_clean": datasets.Value("string"),
+                    "answer_idx": datasets.Value("int32"),
                     "options": datasets.Sequence(datasets.Value("string")),
                 }
             ),
@@ -139,7 +139,7 @@ class MedQA(datasets.GeneratorBasedBuilder):
                 yield i, {
                     "idx": i,
                     "question": question,
-                    "metamap": metamap,
-                    "answer": target,
+                    "question_clean": metamap,
+                    "answer_idx": target,
                     "options": options,
                 }
