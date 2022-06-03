@@ -97,7 +97,6 @@ class MedMCQAFormatter(Formatter):
             desc="Nesting answer options",
             num_proc=4,
         )
-        rich.print(f">> dataset.columns: {dataset}")
         dataset = dataset.rename_columns(
             {
                 "cop": "answer_idx",
@@ -121,7 +120,8 @@ class PubMedQAFormatter(Formatter):
             {split: self.format(dset) for split, dset in dataset.items()}
         )
 
-    def exctract_splits(self, dataset: DatasetDict) -> DatasetDict:
+    @staticmethod
+    def exctract_splits(dataset: DatasetDict) -> DatasetDict:
         assert set(dataset.keys()) == {Split.TRAIN}
         dataset = dataset[Split.TRAIN]
 
@@ -147,6 +147,11 @@ class PubMedQAFormatter(Formatter):
             desc="Flatten contexts",
             num_proc=4,
         )
+        dataset = dataset.rename_columns(
+            {
+                "long_answer": "reasoning",
+            }
+        )
         return dataset
 
 
@@ -166,4 +171,5 @@ class HeadQAFormatter(Formatter):
             }
         )
         dataset = dataset.remove_columns(["image"])
+        dataset = dataset.add_column("reasoning", [""] * len(dataset))
         return dataset
