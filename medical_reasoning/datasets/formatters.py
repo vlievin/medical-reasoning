@@ -1,4 +1,5 @@
 import abc
+import re
 from typing import Dict
 
 import rich
@@ -8,6 +9,16 @@ from datasets import Split
 from loguru import logger
 
 from medical_reasoning.datasets.utils.split_pubmed import split_pubmed
+
+# https://regex101.com/r/9YNTyr/1
+medmcqa_ans_pattern = re.compile(
+    (
+        r"^((ans|answer)?(\.|:|-)?( *)?(is )?)?"
+        r"((\(|\"| |')?[a-d](?!\w))(\)|\"| |')?"
+        r"([ ]+i.e.[(,|.)])?( +)?"
+    ),
+    flags=re.IGNORECASE,
+)
 
 
 class NestColumns(object):
@@ -48,6 +59,25 @@ class ConvertHeadQA(object):
         return {"ra": r_index, "answers": options}
 
 
+class CleanuMedMCQAReasoning(object):
+    def __init__(self, reasoning_column: str = "reasoning"):
+        self.reasoning_column = reasoning_column
+
+    def __call__(self, row: Dict) -> Dict:
+        reasoning = row[self.reasoning_column]
+        if reasoning is None:
+            cleaned_reasoning = ""
+        else:
+            cleaned_reasoning = re.sub(medmcqa_ans_pattern, "", reasoning)
+            # color = "red" if "ans" in cleaned_reasoning.lower() else "green"
+            # rich.print(
+            #     f"[gray]>>> {reasoning}\n"
+            #     f"[{color}]>> {len(cleaned_reasoning)} "
+            #     f">> ({type(cleaned_reasoning)}) {cleaned_reasoning}"
+            # )
+        return {self.reasoning_column: cleaned_reasoning}
+
+
 class Formatter(object):
     @abc.abstractmethod
     def format(self, dataset: Dataset) -> Dataset:
@@ -67,13 +97,20 @@ class MedMCQAFormatter(Formatter):
             desc="Nesting answer options",
             num_proc=4,
         )
+        rich.print(f">> dataset.columns: {dataset}")
         dataset = dataset.rename_columns(
             {
                 "cop": "answer_idx",
+                "exp": "reasoning",
             }
         )
         dataset = dataset.remove_columns(["opa", "opb", "opc", "opd"])
-
+        # cleanup reasoning
+        dataset = dataset.map(
+            CleanuMedMCQAReasoning(),
+            desc="Cleaning up reasoning",
+            num_proc=4,
+        )
         return dataset
 
 

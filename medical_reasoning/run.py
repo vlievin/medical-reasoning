@@ -3,6 +3,7 @@ import logging
 import os
 import socket
 import time
+import warnings
 from pathlib import Path
 from typing import Optional
 
@@ -10,6 +11,7 @@ import datasets
 import hydra
 import numpy as np
 import rich
+from elasticsearch.exceptions import ElasticsearchWarning
 from hydra.core.hydra_config import HydraConfig
 from hydra.types import RunMode
 from hydra.utils import instantiate
@@ -35,6 +37,11 @@ OmegaConf.register_new_resolver("if", lambda x, y, z: y if x else z)
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
 OmegaConf.register_new_resolver("hostname", socket.gethostname)
+
+warnings.filterwarnings(
+    action="ignore",
+    category=ElasticsearchWarning,
+)
 
 
 @hydra.main(
@@ -122,7 +129,9 @@ def run(config: DictConfig) -> None:
             # log the progress
             f1 = f1_score(labels, preds, average="macro")
             acc = accuracy_score(labels, preds)
-            pbar.set_description(f"({split}) Acc: {acc:.2%} F1: {f1:.2%}")
+            pbar.set_description(
+                f"({split}) Acc: {acc:.2%} F1: {f1:.2%} {len(eg.documents)} Docs"
+            )
 
             # write the result to file
             q_locator = f"{builder.name}_{split}_{row_idx}"
@@ -175,24 +184,14 @@ def run(config: DictConfig) -> None:
     logger.info(f">> Logged to {output_dir}")
 
 
-def format_prediction(eg: Example, pred: Prediction, q_locator: str) -> str:
-    formatted_options = "\n".join(
-        [f"   {eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)]
-    )
-    output_str = (
-        f"Outcome: {pred.outcome}\n{SEPARATOR}\n"
-        f"Answer: {eg.answer}: {eg.options[eg.answer_idx]}\n"
-        f"Prediction: {pred.label}: {pred.full}\n{SEPARATOR}\n"
-        f"Question [{q_locator}]:\n{eg.question}\n\n"
-        f"Options:\n{formatted_options}\n{SEPARATOR}\n"
-        f"Reasoning: \n{pred.meta['completed_prompt']}\n"
-    )
-    return output_str
-
-
 def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConfig):
     """Sample the documents for a given example."""
-    queries = [f"{o} {eg.question}" for o in eg.options]
+    if eg.question_clean is not None:
+        base_query = eg.question_clean
+    else:
+        base_query = eg.question
+
+    queries = [f"{o} {base_query}" for o in eg.options]
     results = index(queries, eg.options, k=config.topk)
     documents = []
     if len(results["text"]) != len(results["title"]):
@@ -205,6 +204,21 @@ def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConf
             documents.append(f"Title: {yy}. {xx}")
 
     return eg.copy(update={"documents": documents})
+
+
+def format_prediction(eg: Example, pred: Prediction, q_locator: str) -> str:
+    formatted_options = "\n".join(
+        [f"   {eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)]
+    )
+    output_str = (
+        f"Outcome: {pred.outcome}\n{SEPARATOR}\n"
+        f"Answer: {eg.answer_symbol}: {eg.options[eg.answer_idx]}\n"
+        f"Prediction: {pred.label}: {pred.full}\n{SEPARATOR}\n"
+        f"Question [{q_locator}]:\n{eg.question}\n\n"
+        f"Options:\n{formatted_options}\n{SEPARATOR}\n"
+        f"Reasoning: \n\n{pred.meta['completed_prompt']}\n"
+    )
+    return output_str
 
 
 def format_results(all_results) -> Table:

@@ -94,6 +94,7 @@ class MedQA(datasets.GeneratorBasedBuilder):
                     "question_clean": datasets.Value("string"),
                     "answer_idx": datasets.Value("int32"),
                     "options": datasets.Sequence(datasets.Value("string")),
+                    "reasoning": datasets.Value("string"),
                 }
             ),
             supervised_keys=None,
@@ -142,4 +143,5 @@ class MedQA(datasets.GeneratorBasedBuilder):
                     "question_clean": metamap,
                     "answer_idx": target,
                     "options": options,
+                    "reasoning": "",
                 }

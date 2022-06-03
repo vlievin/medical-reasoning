@@ -17,6 +17,7 @@ class Example(BaseModel):
     documents: List[str] = None
     allowed_options: List[str]
     answer_idx: int
+    question_clean: Optional[str] = None
 
     @property
     def answer_symbol(self):

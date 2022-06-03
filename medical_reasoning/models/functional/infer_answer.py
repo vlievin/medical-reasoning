@@ -48,7 +48,7 @@ def infer_answer_from_choices(
 
     # step 2. Try to cache the options from `options`
     logger.debug(
-        f"> Inferring  labels from {option_symbols} failed. "
+        f"Inferring labels from {option_symbols} failed. "
         f"trying to match the provided options"
     )
     match = get_first_match(prompt_answer, choices=options, keys=option_symbols, op=min)
@@ -59,7 +59,7 @@ def infer_answer_from_choices(
 
     # step 3. Try to catch a last mention of the answer in the pre-answer
     logger.debug(
-        f"> Inferring  labels from {options} failed. " f"trying to match the pre answer"
+        f"Inferring labels from {options} failed. " f"trying to match the pre answer"
     )
     match = get_first_match(pre_answer, choices=options, keys=option_symbols, op=max)
     if match is not None:

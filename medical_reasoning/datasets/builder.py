@@ -30,7 +30,7 @@ QA_FORMATTERS = {
     "medmcqa": MedMCQAFormatter,
 }
 
-REQUIRED_COLUMNS = ["question", "options", "answer_idx"]
+REQUIRED_COLUMNS = ["question", "options", "answer_idx", "reasoning"]
 
 
 class DatasetBuilder(object):
