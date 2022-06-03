@@ -19,6 +19,7 @@ prompt_mode: "chain_of_thought"
 identity: "medical_expert"
 use_documents: false
 topk: 1
+shots: 0
 
 # technicals
 rate_limit: 0.25

@@ -5,12 +5,14 @@ import socket
 import time
 import warnings
 from pathlib import Path
+from typing import Dict
 from typing import Optional
 
 import datasets
 import hydra
 import numpy as np
 import rich
+from datasets import Dataset
 from elasticsearch.exceptions import ElasticsearchWarning
 from hydra.core.hydra_config import HydraConfig
 from hydra.types import RunMode
@@ -25,6 +27,7 @@ from sklearn.metrics import f1_score
 from tqdm import tqdm
 
 from medical_reasoning.datasets import DatasetBuilder
+from medical_reasoning.datasets.stats import DatasetStats
 from medical_reasoning.indexes import ElasticsearchIndex
 from medical_reasoning.models import Reasoner
 from medical_reasoning.utils.config import print_config
@@ -44,6 +47,31 @@ warnings.filterwarnings(
 )
 
 
+class FilterByLength(object):
+    def __init__(
+        self,
+        key: str,
+        *,
+        min_length: int = 0,
+        max_length: int = None,
+        split: bool = True,
+    ):
+        self.key = key
+        self.min_length = min_length
+        self.max_length = max_length
+        self.split = split
+
+    def __call__(self, row: Dict) -> bool:
+        x = row[self.key]
+        if self.split:
+            x = x.split()
+        if self.min_length is not None and len(x) < self.min_length:
+            return False
+        if self.max_length is not None and len(x) > self.max_length:
+            return False
+        return True
+
+
 @hydra.main(
     config_path="configs/",
     config_name="config.yaml",
@@ -56,10 +84,14 @@ def run(config: DictConfig) -> None:
     logging.getLogger("openai").setLevel(logging.WARNING)
     logging.getLogger("elasticsearch").setLevel(logging.WARNING)
     datasets.logging.set_verbosity(datasets.logging.ERROR)
+
+    # write config to file and display it
+    with open("config.yaml", "w") as f:
+        f.write(OmegaConf.to_yaml(config))
     if config.print_config:
         print_config(config)
 
-    # setup the result file
+    # setup the result files
     work_dir = config.sys.work_dir
     data_file = Path("data.json")
     if hydra_config.mode == RunMode.MULTIRUN:
@@ -69,12 +101,18 @@ def run(config: DictConfig) -> None:
     data_file.parent.mkdir(parents=True, exist_ok=True)
     result_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # initialize the data module
+    # initialize the dataset
     builder: DatasetBuilder = instantiate(config.dataset)
     dataset = builder()
     allowed_options = builder.options
     logger.info(f"Allowed options: {', '.join(allowed_options)}")
-    rich.print(dataset)
+    rich.print(f"Dataset:\n{dataset}")
+    dataset_stats = DatasetStats()(dataset)
+    rich.print(dataset_stats)
+    json.dump(dataset_stats, Path("dataset_stats.json").open("w"), indent=2)
+
+    # initialize the dataset used for the shots
+    make_shots_dataset(config)
 
     # setup the index
     if config.use_documents:
@@ -155,6 +193,7 @@ def run(config: DictConfig) -> None:
             "engine": model.engine,
             "prompt_mode": model.prompt_mode,
             "identity": str(model.template.identity),
+            "shots": int(config.shots),
             "grounded": str(config.use_documents),
         }
 
@@ -182,6 +221,32 @@ def run(config: DictConfig) -> None:
         rich.print(f">> Logged to {output_dir}")
 
     logger.info(f">> Logged to {output_dir}")
+
+
+def make_shots_dataset(config) -> Dataset:
+    shots_builder: DatasetBuilder = instantiate(
+        config.dataset,
+        splits="train",
+        subset=None,
+    )
+    shots_dataset = shots_builder()
+    shots_dataset = shots_dataset["train"]
+    rich.print(f"Shots Dataset:\n{shots_dataset}")
+    stats = DatasetStats(percentiles=[50, 99])
+    shots_stats = stats(shots_dataset)
+    # take the training split and use only the reasonings in percentiles [50, 95]
+    min_length = int(shots_stats["reasoning"]["words"]["percentiles"]["50"])
+    max_length = int(shots_stats["reasoning"]["words"]["percentiles"]["99"])
+    pipe = FilterByLength("reasoning", min_length=min_length, max_length=max_length)
+    shots_dataset = shots_dataset.filter(
+        pipe,
+        num_proc=4,
+        desc=f"Filtering shots dataset lengths: [{min_length}-{max_length}]",
+    )
+    shots_stats = stats(shots_dataset)
+    rich.print(shots_stats)
+    json.dump(shots_stats, Path("shots_stats.json").open("w"), indent=2)
+    return shots_dataset
 
 
 def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConfig):
@@ -233,6 +298,7 @@ def format_results(all_results) -> Table:
         "prompt_mode": "<20",
         "identity": "<20",
         "grounded": "<16",
+        "shots": "",
     }
 
     first_row = all_results[0]
