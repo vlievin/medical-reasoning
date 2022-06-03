@@ -1,2 +1,2 @@
 cache_dir: /scratch/${whoami:}/cache/
-work_dir: /scratch/${whoami:}/fz-openqa/
+work_dir: /scratch/${whoami:}/medical-reasoning/

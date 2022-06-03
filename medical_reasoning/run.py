@@ -60,6 +60,8 @@ def run(config: DictConfig) -> None:
         result_file = Path(work_dir) / hydra_config.sweep.dir / "results.jsonl"
     else:
         result_file = Path(work_dir) / hydra_config.run.dir / "results.jsonl"
+    data_file.parent.mkdir(parents=True, exist_ok=True)
+    result_file.parent.mkdir(parents=True, exist_ok=True)
 
     # initialize the data module
     builder: DatasetBuilder = instantiate(config.dataset)
@@ -69,7 +71,10 @@ def run(config: DictConfig) -> None:
     rich.print(dataset)
 
     # setup the index
-    index: Optional[ElasticsearchIndex] = instantiate(config.index)
+    if config.use_documents:
+        index: Optional[ElasticsearchIndex] = instantiate(config.index)
+    else:
+        index = None
 
     # setting up OpenAI API
     with open_dict(config):
@@ -106,9 +111,6 @@ def run(config: DictConfig) -> None:
             documents = row.get("documents", [])
             if len(documents) == 0 and index is not None:
                 documents = sample_documents(index, question, options, config=config)
-
-            rich.print(documents)
-            exit()
 
             prediction, meta = model(question, options=options, documents=documents)
             try:
@@ -172,6 +174,7 @@ def run(config: DictConfig) -> None:
             "engine": model.engine,
             "prompt_mode": model.prompt_mode,
             "identity": str(model.template.identity),
+            "grounded": str(config.use_documents)
         }
 
         # write data
@@ -202,10 +205,10 @@ def run(config: DictConfig) -> None:
 
 def sample_documents(index, question, options, *, config):
     queries = [f"{o} {question}" for o in options]
-    rich.print(f">> Queries: {queries}")
+    # rich.print(f">> Queries: {queries}")
     qtitles = options
     results = index(queries, qtitles, k=config.topk)
-    rich.print(results)
+    # rich.print(results)
     documents = []
     assert (
         len(
@@ -231,6 +234,7 @@ def format_results(all_results) -> Table:
         "engine": "<20",
         "prompt_mode": "<20",
         "identity": "<20",
+        "grounded" : "<16"
     }
 
     first_row = all_results[0]
