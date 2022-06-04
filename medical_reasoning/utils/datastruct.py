@@ -39,7 +39,7 @@ class Example(BaseModel):
         """Check if answer_idx is in range of options."""
         answer_idx = values.get("answer_idx")
         allowed_options = values.get("allowed_options")
-        if answer_idx < 0 or answer_idx >= len(allowed_options):
+        if (answer_idx < 0 and answer_idx != -1) or answer_idx >= len(allowed_options):
             raise ValueError(
                 f"Invalid answer_idx range: {answer_idx} not int [0, {len(allowed_options) - 1}]."
                 f" Allowed options: {allowed_options}"

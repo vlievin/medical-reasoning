@@ -1,8 +1,10 @@
 import os
+import time
 from typing import Any
 from typing import Dict
 from typing import List
-import os
+
+import numpy as np
 import openai
 import rich
 from dotenv import load_dotenv
@@ -23,19 +25,45 @@ class Reasoner(object):
         engine: str = "text-ada-001",
         prompt_mode="chain_of_thought",
         template: ChainOfThoughtTemplate = ...,
-        price:float,
+        price: float,
         tokenizer: GPT2Tokenizer,
+        max_tokens: int = 256,
+        max_rate: float = 60,
     ):
         self.engine = engine
         self.template = template
         self.price = price
         self.tokenizer = tokenizer
         self.prompt_mode = prompt_mode
+        self.max_tokens = max_tokens
+        self.max_rate = max_rate
         assert self.prompt_mode in {
             "option_chain_of_thought",
             "chain_of_thought",
             "zero_shot",
         }
+
+        # state
+        self.reset_stats()
+
+    def reset_stats(self):
+        self.total_cost = 0
+        self.n_calls = 0
+        self.calls_timestamps = []
+
+    def timestamp(self):
+        self.n_calls += 1
+        self.calls_timestamps.append(time.time())
+        self.calls_timestamps = self.last_calls(period=3600)
+
+    def last_calls(self, period=60) -> List:
+        now = time.time()
+        time_stamps = [ts for ts in self.calls_timestamps if now - ts < period]
+        return time_stamps
+
+    @property
+    def is_dryrun(self) -> bool:
+        return bool(os.getenv("DRYRUN", default=False))
 
     def __repr__(self):
         return (
@@ -177,21 +205,60 @@ class Reasoner(object):
             raise ValueError(f"Unknown prompt mode: {self.prompt_mode}")
 
     def _get_prompt_completion(
-        self, prompt, stop="<|endoftext|>", max_tokens=512
+        self, prompt, stop="<|endoftext|>", max_tokens=None
     ) -> str:
-        if self.engine == "dryrun":
-            return "<GPT-3-answer>"
-        response = openai.Completion.create(
-            engine=self.engine,
-            prompt=prompt,
-            temperature=0,  # todo: increase
-            max_tokens=max_tokens,
-            # max_tokens=512,
-            top_p=1,
-            # logprobs=5,
-            frequency_penalty=0.0,
-            presence_penalty=0.0,
-            stop=stop,
-        )
-        completion = response["choices"][0]["text"]
-        return completion.split("<|endoftext|>")[0]
+        self.throttle()
+
+        if max_tokens is None:
+            max_tokens = self.max_tokens
+
+        # add the price of the prompt
+        self.total_cost += self.estimate_price(prompt)
+
+        # query the API
+        if self.is_dryrun:
+            n_tokens = int(0.5 * max_tokens)  # expected number of tokens
+            rgn = np.random.RandomState(0)
+            tokens = rgn.randint(0, self.tokenizer.vocab_size, size=(n_tokens,))
+            tokens = tokens.tolist()
+            completion = self.tokenizer.decode(tokens)
+        else:
+            response = openai.Completion.create(
+                engine=self.engine,
+                prompt=prompt,
+                temperature=0,  # todo: increase
+                max_tokens=max_tokens,
+                # max_tokens=512,
+                top_p=1,
+                # logprobs=5,
+                frequency_penalty=0.0,
+                presence_penalty=0.0,
+                stop=stop,
+            )
+            if len(response["choices"]) != 1:
+                raise NotImplementedError("Pricing is only implemented for one result")
+            completion = response["choices"][0]["text"]
+
+        # keep track of the calls
+        self.timestamp()
+
+        # add the price for the completion
+        self.total_cost += self.estimate_price(completion)
+
+        completion = completion.split("<|endoftext|>")[0]
+        return completion
+
+    def throttle(self):
+        """make sure to remains within the end-user rate limits
+        of no more than 60 requests per minute"""
+        RATE_BASE_DURATION = 60
+        last_calls = self.last_calls(RATE_BASE_DURATION)
+        if len(last_calls) >= self.max_rate - 1:
+            sleep_time = RATE_BASE_DURATION - (time.time() - last_calls[0])
+            time.sleep(max(0, sleep_time))
+
+    def estimate_price(self, prompt) -> float:
+        """estimate the price of each call"""
+        encoded_tokens = self.tokenizer.encode(prompt)
+        cost = len(encoded_tokens) * self.price / 1000
+        return cost

@@ -1,5 +1,5 @@
 _target_: medical_reasoning.datasets.DatasetBuilder
 name: ???
 subset: null
-splits: validation
+splits: test
 cache_dir: ${sys.cache_dir}

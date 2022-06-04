@@ -125,11 +125,11 @@ class PubMedQAFormatter(Formatter):
         assert set(dataset.keys()) == {Split.TRAIN}
         dataset = dataset[Split.TRAIN]
 
-        train, valid, test = split_pubmed(dataset, 3)
+        train, test = split_pubmed(dataset, 2)
         return DatasetDict(
             {
                 Split.TRAIN: train,
-                Split.VALIDATION: valid,
+                Split.VALIDATION: test,
                 Split.TEST: test,
             }
         )
