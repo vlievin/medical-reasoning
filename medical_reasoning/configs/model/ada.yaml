@@ -2,3 +2,4 @@ defaults:
   - base
 
 engine: text-ada-001
+price: 0.0008

@@ -11,8 +11,12 @@ from loguru import logger
 
 
 def get_start_indices(target: str | List, pattern: str) -> list[int]:
-    matches = re.finditer(pattern, target)
-    return [m.start() for m in matches]
+    try:
+        matches = re.finditer(pattern, target)
+        return [m.start() for m in matches]
+    except Exception as exc:
+        logger.warning(f"Failed to infer answer: {exc}")
+        return []
 
 
 def safe_min(lst: Iterable[T]) -> Optional[T]:

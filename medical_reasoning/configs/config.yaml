@@ -3,6 +3,7 @@
 defaults:
   - _self_
   - dataset: medqa_us
+  - tokenizer: gpt2
   - index: elasticsearch
   - model: ada
   - sys: local
@@ -22,6 +23,5 @@ topk: 1
 shots: 0
 
 # technicals
-rate_limit: 0.25
 print_config: true
 disable_caching: false

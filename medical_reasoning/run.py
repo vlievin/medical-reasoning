@@ -131,11 +131,6 @@ def run(config: DictConfig) -> None:
     output_dir.mkdir(exist_ok=True, parents=True)
 
     logger.info(f"Logging to {output_dir}")
-    min_duration_per_question = 1.0 / config.rate_limit
-    logger.info(
-        f"Rate limit: {config.rate_limit}, Min. duration per question: {min_duration_per_question}"
-    )
-    t0 = time.time()
     splits = list(dataset.keys())
     split_info = [f"{split} ({len(dataset[split])})" for split in splits]
     logger.info(f"Found splits: {', '.join(split_info)}")
@@ -161,9 +156,6 @@ def run(config: DictConfig) -> None:
             # process the Example with the model
             prediction_str, meta = model(eg, shots=shots)
             pred = Prediction(prediction_str=prediction_str, example=eg, meta=meta)
-            rich.print(f"{' completed prompt ':=^80}")
-            rich.print(meta["completed_prompt"])
-            # exit()
 
             # update the trackers
             labels.append(eg.answer_idx)
@@ -173,7 +165,8 @@ def run(config: DictConfig) -> None:
             f1 = f1_score(labels, preds, average="macro")
             acc = accuracy_score(labels, preds)
             pbar.set_description(
-                f"({split}) Acc: {acc:.2%} F1: {f1:.2%} {len(eg.documents)} Docs"
+                f"({split}) Acc: {acc:.2%} F1: {f1:.2%} "
+                f"({model.n_calls} calls, ${model.total_cost:.2f})"
             )
 
             # write the result to file
@@ -181,12 +174,6 @@ def run(config: DictConfig) -> None:
             output_str = format_prediction(eg, pred, q_locator)
             with open(output_dir / f"{q_locator}_{pred.outcome}.txt", "w") as f:
                 f.write(output_str)
-
-            # throttle the API
-            if time.time() - t0 < min_duration_per_question:
-                t = min_duration_per_question - (time.time() - t0)
-                time.sleep(max(t, 0))
-            t0 = time.time()
 
         # register the results for the whole split
         split_results = {
@@ -200,6 +187,7 @@ def run(config: DictConfig) -> None:
             "identity": str(model.template.identity),
             "shots": int(config.shots),
             "grounded": str(config.use_documents),
+            "cost": float(model.total_cost),
         }
 
         # write data
@@ -267,8 +255,11 @@ def make_eg(
     return eg
 
 
-def make_shots_dataset(config, percentiles=None) -> Dataset:
+def make_shots_dataset(config, percentiles=None) -> Optional[Dataset]:
     """Build the dataset used to draw shots from."""
+    if config.shots == 0:
+        return None
+
     if percentiles is None:
         percentiles = [50, 90]
     shots_builder: DatasetBuilder = instantiate(
@@ -351,6 +342,7 @@ def format_results(all_results) -> Table:
         "identity": "<20",
         "grounded": "<16",
         "shots": "",
+        "cost": ".2f",
     }
 
     first_row = all_results[0]

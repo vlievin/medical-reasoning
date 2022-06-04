@@ -2,3 +2,4 @@ defaults:
   - base
 
 name: medmcqa
+splits: validation

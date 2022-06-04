@@ -1,0 +1,3 @@
+_target_: transformers.GPT2TokenizerFast.from_pretrained
+pretrained_model_name_or_path: gpt2
+cache_dir: ${sys.cache_dir}

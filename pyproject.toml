@@ -16,6 +16,7 @@ loguru = "^0.6.0"
 Pillow = "^9.1.1"
 sklearn = "^0.0"
 elasticsearch = "~7"
+transformers = "^4.19.2"
 pydantic = "^1.9.1"
 
 [tool.poetry.dev-dependencies]
@@ -40,3 +41,4 @@ debug_exps = "experiment -m model=ada dataset=medqa_us,medmcqa dataset.subset=3 
 subset_exps = "experiment -m model=davinci dataset=medmcqa,headqa,medqa_us dataset.subset=30 dataset.splits=test"
 subset_prompt_exps = "experiment -m model=davinci dataset=medmcqa,headqa,medqa_us,pubmedqa dataset.subset=20 dataset.splits=validation model.prompt_mode=chain_of_thought,zero_shot"
 test_identities = "experiment -m +flavor=subset model=ada,davinci model.prompt_mode=chain_of_thought model.template.identity=none,doctor,medical_expert"
+full_exps = "experiment -m model=davinci model.prompt_mode=zero_shot,chain_of_thought model.template.identity=medical_expert use_documents=false,true dataset=pubmedqa,medqa_us,medmcqa"
