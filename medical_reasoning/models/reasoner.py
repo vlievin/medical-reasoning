@@ -2,9 +2,10 @@ import os
 from typing import Any
 from typing import Dict
 from typing import List
-
+import os
 import openai
 from dotenv import load_dotenv
+from transformers import GPT2Tokenizer
 
 from medical_reasoning.models.templates import ChainOfThoughtTemplate
 from medical_reasoning.models.templates import MultipleChoiceTemplate
@@ -20,9 +21,13 @@ class Reasoner(object):
         engine: str = "text-ada-001",
         prompt_mode="chain_of_thought",
         template: ChainOfThoughtTemplate = ...,
+        price:float,
+        tokenizer: GPT2Tokenizer,
     ):
         self.engine = engine
         self.template = template
+        self.price = price
+        self.tokenizer = tokenizer
         self.prompt_mode = prompt_mode
         assert self.prompt_mode in {
             "option_chain_of_thought",

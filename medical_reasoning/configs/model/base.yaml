@@ -4,3 +4,5 @@ defaults:
 _target_: medical_reasoning.models.Reasoner
 engine: ???
 prompt_mode: ${prompt_mode}
+price: ???
+tokenizer: ${tokenizer}

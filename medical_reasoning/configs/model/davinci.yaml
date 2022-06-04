@@ -2,3 +2,4 @@ defaults:
   - base
 
 engine: text-davinci-002
+price: 0.0600
