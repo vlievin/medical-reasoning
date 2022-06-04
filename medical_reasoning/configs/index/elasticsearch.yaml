@@ -1,12 +1,10 @@
 defaults:
   - es_body: default
+  - corpus: wiki
 
 _target_: medical_reasoning.indexes.ElasticsearchIndex
-dataset: wikipedia
-name: 20220301.en
 subset: null
 ingest_bs: 100_000
-cache_dir: ${sys.cache_dir}
 num_proc: 4
 title_boost_weight: 1.0
 passage_length: 100

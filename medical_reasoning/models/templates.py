@@ -135,7 +135,7 @@ class MultipleChoiceTemplate(ChainOfThoughtTemplate):
         prompt = ""
 
         if self.use_documents:
-            if documents is None:
+            if documents is None or len(documents) == 0:
                 raise ValueError("documents must be provided if use_documents is True")
             formatted_documents = "\n".join(documents)
             prompt += f"Context: {formatted_documents}\n\n"

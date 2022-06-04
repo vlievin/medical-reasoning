@@ -2,16 +2,20 @@ import json
 import logging
 import os
 import socket
-import string
-import sys
 import time
+import warnings
 from pathlib import Path
+from typing import Any
+from typing import Dict
+from typing import List
 from typing import Optional
 
 import datasets
 import hydra
 import numpy as np
 import rich
+from datasets import Dataset
+from elasticsearch.exceptions import ElasticsearchWarning
 from hydra.core.hydra_config import HydraConfig
 from hydra.types import RunMode
 from hydra.utils import instantiate
@@ -25,17 +29,49 @@ from sklearn.metrics import f1_score
 from tqdm import tqdm
 
 from medical_reasoning.datasets import DatasetBuilder
+from medical_reasoning.datasets.stats import DatasetStats
 from medical_reasoning.indexes import ElasticsearchIndex
 from medical_reasoning.models import Reasoner
 from medical_reasoning.utils.config import print_config
+from medical_reasoning.utils.datastruct import Example
+from medical_reasoning.utils.datastruct import Prediction
 
 SEPARATOR = "-" * 80 + "\n"
-
 
 OmegaConf.register_new_resolver("if", lambda x, y, z: y if x else z)
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
 OmegaConf.register_new_resolver("hostname", socket.gethostname)
+
+warnings.filterwarnings(
+    action="ignore",
+    category=ElasticsearchWarning,
+)
+
+
+class FilterByLength(object):
+    def __init__(
+        self,
+        key: str,
+        *,
+        min_length: int = 0,
+        max_length: int = None,
+        split: bool = True,
+    ):
+        self.key = key
+        self.min_length = min_length
+        self.max_length = max_length
+        self.split = split
+
+    def __call__(self, row: Dict) -> bool:
+        x = row[self.key]
+        if self.split:
+            x = x.split()
+        if self.min_length is not None and len(x) < self.min_length:
+            return False
+        if self.max_length is not None and len(x) > self.max_length:
+            return False
+        return True
 
 
 @hydra.main(
@@ -50,10 +86,14 @@ def run(config: DictConfig) -> None:
     logging.getLogger("openai").setLevel(logging.WARNING)
     logging.getLogger("elasticsearch").setLevel(logging.WARNING)
     datasets.logging.set_verbosity(datasets.logging.ERROR)
+
+    # write config to file and display it
+    with open("config.yaml", "w") as f:
+        f.write(OmegaConf.to_yaml(config))
     if config.print_config:
         print_config(config)
 
-    # setup the result file
+    # setup the result files
     work_dir = config.sys.work_dir
     data_file = Path("data.json")
     if hydra_config.mode == RunMode.MULTIRUN:
@@ -63,12 +103,18 @@ def run(config: DictConfig) -> None:
     data_file.parent.mkdir(parents=True, exist_ok=True)
     result_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # initialize the data module
+    # initialize the dataset
     builder: DatasetBuilder = instantiate(config.dataset)
     dataset = builder()
     allowed_options = builder.options
     logger.info(f"Allowed options: {', '.join(allowed_options)}")
-    rich.print(dataset)
+    rich.print(f"Dataset:\n{dataset}")
+    dataset_stats = DatasetStats()(dataset)
+    rich.print(dataset_stats)
+    json.dump(dataset_stats, Path("dataset_stats.json").open("w"), indent=2)
+
+    # initialize the dataset used for the shots
+    shots_dataset = make_shots_dataset(config)
 
     # setup the index
     if config.use_documents:
@@ -103,62 +149,40 @@ def run(config: DictConfig) -> None:
         for i, row_idx in (
             pbar := tqdm(enumerate(indices), unit="question", total=len(indices))
         ) :
-            row = dset[row_idx]
-            question = row["question"]
-            options = row["options"]
-            answer_idx = row["answer"]
-            answer = allowed_options[answer_idx]
-            documents = row.get("documents", [])
-            if len(documents) == 0 and index is not None:
-                documents = sample_documents(index, question, options, config=config)
 
-            prediction, meta = model(question, options=options, documents=documents)
-            try:
-                prediction_idx = allowed_options.index(prediction)
-            except Exception as exc:
-                logger.warning(
-                    f"Prediction label couldn't be inferred "
-                    f"(prediction={prediction}, "
-                    f"allowed_options={allowed_options}, "
-                    f"answer={meta['answer']} ). "
-                    f"Exception: {exc}"
-                )
-                prediction_idx = -1
+            # get the row of data, validate and potentially sample documents
+            eg = make_eg(dset[row_idx], allowed_options, index=index, config=config)
+
+            # samples the shots
+            shots = make_shots_egs(
+                shots_dataset, row_idx, allowed_options, index=index, config=config
+            )
+
+            # process the Example with the model
+            prediction_str, meta = model(eg, shots=shots)
+            pred = Prediction(prediction_str=prediction_str, example=eg, meta=meta)
+            rich.print(f"{' completed prompt ':=^80}")
+            rich.print(meta["completed_prompt"])
+            # exit()
 
             # update the trackers
-            labels.append(answer_idx)
-            preds.append(prediction_idx)
+            labels.append(eg.answer_idx)
+            preds.append(pred.idx)
 
             # log the progress
             f1 = f1_score(labels, preds, average="macro")
             acc = accuracy_score(labels, preds)
-            pbar.set_description(f"({split}) Acc: {acc:.2%} F1: {f1:.2%}")
+            pbar.set_description(
+                f"({split}) Acc: {acc:.2%} F1: {f1:.2%} {len(eg.documents)} Docs"
+            )
 
             # write the result to file
-            outcome = "correct" if prediction == answer else "incorrect"
-            with open(output_dir / f"{split}_{row_idx}_{outcome}.txt", "w") as f:
-                q_locator = f"{builder.name}:{split}:{row_idx}"
-                formatted_options = "\n".join(
-                    [
-                        f"   {allowed_options[i]}) {option}"
-                        for i, option in enumerate(options)
-                    ]
-                )
-                pred_str = (
-                    options[prediction_idx]
-                    if prediction_idx is not None and prediction_idx >= 0
-                    else "N/A"
-                )
-                output_str = (
-                    f"Outcome: {outcome}\n{SEPARATOR}\n"
-                    f"Answer: {answer}: {options[answer_idx]}\n"
-                    f"Prediction: {prediction}: {pred_str}\n{SEPARATOR}\n"
-                    f"Question [{q_locator}]:\n{question}\n\n"
-                    f"Options:\n{formatted_options}\n{SEPARATOR}\n"
-                    f"Reasoning: \n{meta['completed_prompt']}\n"
-                )
+            q_locator = f"{builder.name}_{split}_{row_idx}"
+            output_str = format_prediction(eg, pred, q_locator)
+            with open(output_dir / f"{q_locator}_{pred.outcome}.txt", "w") as f:
                 f.write(output_str)
 
+            # throttle the API
             if time.time() - t0 < min_duration_per_question:
                 t = min_duration_per_question - (time.time() - t0)
                 time.sleep(max(t, 0))
@@ -174,7 +198,8 @@ def run(config: DictConfig) -> None:
             "engine": model.engine,
             "prompt_mode": model.prompt_mode,
             "identity": str(model.template.identity),
-            "grounded": str(config.use_documents)
+            "shots": int(config.shots),
+            "grounded": str(config.use_documents),
         }
 
         # write data
@@ -203,29 +228,119 @@ def run(config: DictConfig) -> None:
     logger.info(f">> Logged to {output_dir}")
 
 
-def sample_documents(index, question, options, *, config):
-    queries = [f"{o} {question}" for o in options]
-    # rich.print(f">> Queries: {queries}")
-    qtitles = options
-    results = index(queries, qtitles, k=config.topk)
-    # rich.print(results)
-    documents = []
-    assert (
-        len(
-            results["text"],
+def make_shots_egs(
+    shots_dataset: Dataset,
+    row_idx: int,
+    allowed_options: List,
+    *,
+    index: Optional[ElasticsearchIndex],
+    config: DictConfig,
+) -> List[Example]:
+    """Sample a bunch of Examples from the Shots dataset."""
+    shots = []
+    if config.shots > 0:
+        rgn = np.random.RandomState(row_idx)
+        shots_indices = rgn.choice(
+            list(range(len(shots_dataset))), size=config.shots, replace=False
         )
-        == len(results["title"])
+        for j in shots_indices:
+            shots.append(
+                make_eg(
+                    shots_dataset[int(j)], allowed_options, index=index, config=config
+                )
+            )
+
+    return shots
+
+
+def make_eg(
+    row: Dict[str, Any],
+    allowed_options: List,
+    *,
+    index: Optional[ElasticsearchIndex],
+    config: DictConfig,
+) -> Example:
+    """Make an example from a row of data. Potentially sample the index."""
+    eg = Example(**row, allowed_options=allowed_options)
+    if len(eg.documents) == 0 and index is not None:
+        eg = sample_documents(eg, index=index, config=config)
+    return eg
+
+
+def make_shots_dataset(config, percentiles=None) -> Dataset:
+    """Build the dataset used to draw shots from."""
+    if percentiles is None:
+        percentiles = [50, 90]
+    shots_builder: DatasetBuilder = instantiate(
+        config.dataset,
+        splits="train",
+        subset=None,
     )
+    shots_dataset = shots_builder()
+    shots_dataset = shots_dataset["train"]
+    rich.print(f"Shots Dataset:\n{shots_dataset}")
+    stats = DatasetStats(percentiles=percentiles)
+    shots_stats = stats(shots_dataset)
+    # take the training split and use only the reasonings in percentiles [50, 95]
+    min_length = int(
+        shots_stats["reasoning"]["words"]["percentiles"][str(percentiles[0])]
+    )
+    max_length = int(
+        shots_stats["reasoning"]["words"]["percentiles"][str(percentiles[1])]
+    )
+    pipe = FilterByLength("reasoning", min_length=min_length, max_length=max_length)
+    shots_dataset = shots_dataset.filter(
+        pipe,
+        num_proc=4,
+        desc=f"Filtering shots dataset lengths: [{min_length}-{max_length}]",
+    )
+    shots_stats = stats(shots_dataset)
+    rich.print(shots_stats)
+    json.dump(shots_stats, Path("shots_stats.json").open("w"), indent=2)
+    return shots_dataset
+
+
+def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConfig):
+    """Sample the documents for a given example."""
+    if eg.question_clean is not None:
+        base_query = eg.question_clean
+    else:
+        base_query = eg.question
+
+    queries = [f"{o} {base_query}" for o in eg.options]
+    results = index(queries, eg.options, k=config.topk)
+    documents = []
+    if len(results["text"]) != len(results["title"]):
+        raise ValueError("text and title must be of the same length")
+
     for x, y in zip(results["text"], results["title"]):
-        assert len(x) == len(y)
+        if len(x) != len(y):
+            raise ValueError("text and title must be of the same number of results")
         for xx, yy in zip(x, y):
             documents.append(f"Title: {yy}. {xx}")
-    return documents
+
+    return eg.copy(update={"documents": documents})
+
+
+def format_prediction(eg: Example, pred: Prediction, q_locator: str) -> str:
+    """Format the prediction for a given example."""
+    formatted_options = "\n".join(
+        [f"   {eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)]
+    )
+    output_str = (
+        f"Outcome: {pred.outcome}\n{SEPARATOR}\n"
+        f"Answer: {eg.answer_symbol}: {eg.options[eg.answer_idx]}\n"
+        f"Prediction: {pred.label}: {pred.full}\n{SEPARATOR}\n"
+        f"Question [{q_locator}]:\n{eg.question}\n\n"
+        f"Options:\n{formatted_options}\n{SEPARATOR}\n"
+        f"Reasoning: \n\n{pred.meta['completed_prompt']}\n"
+    )
+    return output_str
 
 
 def format_results(all_results) -> Table:
-    """Nicely display the results of the experiment using `rich.table.Table`."""
-    FMTS = {
+    """Format the results of the experiment using `rich.table.Table`."""
+    COLUMN_FORMATS = {
         "dataset": "<20",
         "split": "<10",
         "n_samples": "",
@@ -234,7 +349,8 @@ def format_results(all_results) -> Table:
         "engine": "<20",
         "prompt_mode": "<20",
         "identity": "<20",
-        "grounded" : "<16"
+        "grounded": "<16",
+        "shots": "",
     }
 
     first_row = all_results[0]
@@ -243,7 +359,7 @@ def format_results(all_results) -> Table:
     for key in keys:
         table.add_column(key, justify="center")
     for record in all_results:
-        table.add_row(*[f"{record[key]:{FMTS[key]}}" for key in keys])
+        table.add_row(*[f"{record[key]:{COLUMN_FORMATS[key]}}" for key in keys])
 
     return table
 

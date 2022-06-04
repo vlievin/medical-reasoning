@@ -1,0 +1,5 @@
+defaults:
+  - base
+
+path: wikipedia
+name: 20220301.simple
