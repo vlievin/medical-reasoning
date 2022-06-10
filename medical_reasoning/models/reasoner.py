@@ -1,14 +1,20 @@
+import hashlib
 import os
 import time
-from typing import Any
+from copy import copy
+from pathlib import Path
+from typing import Any, Callable
 from typing import Dict
 from typing import List
 
+import dill
+import loguru
 import numpy as np
 import openai
 import rich
 from dotenv import load_dotenv
 from transformers import GPT2Tokenizer
+from datasets.fingerprint import Hasher
 
 from medical_reasoning.models.templates import ChainOfThoughtTemplate
 from medical_reasoning.models.templates import MultipleChoiceTemplate
@@ -18,17 +24,61 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
+
+def update_hash(obj: Any, hasher: Hasher):
+    if isinstance(obj, (set, tuple, list)):
+        for el in obj:
+            update_hash(el, hasher)
+    elif isinstance(obj, dict):
+        for k, v in sorted(obj.items(), key=lambda x: x[0]):
+            update_hash(k, hasher)
+            update_hash(v, hasher)
+    else:
+        hasher.update(obj)
+
+
+
+
+class CachedFunction(object):
+    def __init__(self, cache_dir: os.PathLike):
+        self.cache_dir = Path(cache_dir)
+
+    def __call__(self,
+                 fn: Callable,
+                 *args,
+                 **kwargs) -> (Any, bool):
+
+        # save the arguments
+        data = copy(kwargs)
+        data["__args__"] = list(args)
+        data["__fn__"] = fn
+
+        # fingerprint
+        hasher = Hasher()
+        update_hash(data, hasher)
+        fingerprint = hasher.hexdigest()
+        filename = f"{fingerprint}.pkl"
+        cache_file = self.cache_dir / filename
+
+        if cache_file.exists():
+            return dill.load(open(cache_file, "rb")), True
+        else:
+            result = fn(*args, **kwargs)
+            dill.dump(result, open(cache_file, "wb"))
+            return result, False
+
 class Reasoner(object):
     def __init__(
-        self,
-        *,
-        engine: str = "text-ada-001",
-        prompt_mode="chain_of_thought",
-        template: ChainOfThoughtTemplate = ...,
-        price: float,
-        tokenizer: GPT2Tokenizer,
-        max_tokens: int = 256,
-        max_rate: float = 60,
+            self,
+            *,
+            engine: str = "text-ada-001",
+            prompt_mode="chain_of_thought",
+            template: ChainOfThoughtTemplate = ...,
+            price: float,
+            tokenizer: GPT2Tokenizer,
+            max_tokens: int = 256,
+            max_rate: float = 60,
+            cache_dir: os.PathLike = None,
     ):
         self.engine = engine
         self.template = template
@@ -37,6 +87,8 @@ class Reasoner(object):
         self.prompt_mode = prompt_mode
         self.max_tokens = max_tokens
         self.max_rate = max_rate
+        self.cache = CachedFunction(cache_dir=cache_dir)
+
         assert self.prompt_mode in {
             "option_chain_of_thought",
             "chain_of_thought",
@@ -74,7 +126,7 @@ class Reasoner(object):
         )
 
     def __call__(
-        self, eg: Example, shots: List[Example], **kwargs
+            self, eg: Example, shots: List[Example], **kwargs
     ) -> (str, Dict[str, Any]):
         completed_prompt = ""
         for shot in shots:
@@ -87,7 +139,7 @@ class Reasoner(object):
         return self.process_example(eg, completed_prompt=completed_prompt, **kwargs)
 
     def process_example(
-        self, eg: Example, simulate: bool = False, completed_prompt: str = ""
+            self, eg: Example, simulate: bool = False, completed_prompt: str = ""
     ) -> (str, Dict[str, Any]):
         diagnostics = {}
         if self.prompt_mode == "chain_of_thought":
@@ -205,7 +257,7 @@ class Reasoner(object):
             raise ValueError(f"Unknown prompt mode: {self.prompt_mode}")
 
     def _get_prompt_completion(
-        self, prompt, stop="<|endoftext|>", max_tokens=None
+            self, prompt, stop="<|endoftext|>", max_tokens=None
     ) -> str:
         self.throttle()
 
@@ -216,6 +268,7 @@ class Reasoner(object):
         self.total_cost += self.estimate_price(prompt)
 
         # query the API
+        is_cached = False
         if self.is_dryrun:
             n_tokens = int(0.5 * max_tokens)  # expected number of tokens
             rgn = np.random.RandomState(0)
@@ -223,7 +276,8 @@ class Reasoner(object):
             tokens = tokens.tolist()
             completion = self.tokenizer.decode(tokens)
         else:
-            response = openai.Completion.create(
+            response, is_cached = self.cache(
+                openai.Completion.create,
                 engine=self.engine,
                 prompt=prompt,
                 temperature=0,  # todo: increase
@@ -239,11 +293,11 @@ class Reasoner(object):
                 raise NotImplementedError("Pricing is only implemented for one result")
             completion = response["choices"][0]["text"]
 
-        # keep track of the calls
-        self.timestamp()
-
-        # add the price for the completion
-        self.total_cost += self.estimate_price(completion)
+        # keep track of the calls (except when using cached results)
+        if not is_cached:
+            self.timestamp()
+            # add the price for the completion
+            self.total_cost += self.estimate_price(completion)
 
         completion = completion.split("<|endoftext|>")[0]
         return completion

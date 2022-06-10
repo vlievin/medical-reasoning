@@ -8,3 +8,4 @@ price: ??? # price per 1k tokens
 tokenizer: ${tokenizer}
 max_tokens: 256
 max_rate: 60 # rate per minute
+cache_dir: ${sys.cache_dir}
