@@ -1,102 +1,65 @@
-import hashlib
 import os
 import time
 from copy import copy
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from typing import Dict
 from typing import List
+from typing import Optional
 
-import dill
-import loguru
 import numpy as np
 import openai
 import rich
+import yaml
 from dotenv import load_dotenv
 from transformers import GPT2Tokenizer
-from datasets.fingerprint import Hasher
 
-from medical_reasoning.models.templates import ChainOfThoughtTemplate
+from medical_reasoning import configs
+from medical_reasoning.models.cache import CachedFunction
 from medical_reasoning.models.templates import MultipleChoiceTemplate
+from medical_reasoning.models.templates import PromptTemplate
 from medical_reasoning.utils.datastruct import Example
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+DEFAULT_CONFIG_PATH = (
+    Path(configs.__file__).parent / "model" / "config" / "default.yaml"
+)
 
-
-def update_hash(obj: Any, hasher: Hasher):
-    if isinstance(obj, (set, tuple, list)):
-        for el in obj:
-            update_hash(el, hasher)
-    elif isinstance(obj, dict):
-        for k, v in sorted(obj.items(), key=lambda x: x[0]):
-            update_hash(k, hasher)
-            update_hash(v, hasher)
-    else:
-        hasher.update(obj)
-
-
-
-
-class CachedFunction(object):
-    def __init__(self, cache_dir: os.PathLike):
-        self.cache_dir = Path(cache_dir)
-
-    def __call__(self,
-                 fn: Callable,
-                 *args,
-                 **kwargs) -> (Any, bool):
-
-        # save the arguments
-        data = copy(kwargs)
-        data["__args__"] = list(args)
-        data["__fn__"] = fn
-
-        # fingerprint
-        hasher = Hasher()
-        update_hash(data, hasher)
-        fingerprint = hasher.hexdigest()
-        filename = f"{fingerprint}.pkl"
-        cache_file = self.cache_dir / filename
-
-        if cache_file.exists():
-            return dill.load(open(cache_file, "rb")), True
-        else:
-            result = fn(*args, **kwargs)
-            dill.dump(result, open(cache_file, "wb"))
-            return result, False
 
 class Reasoner(object):
     def __init__(
-            self,
-            *,
-            engine: str = "text-ada-001",
-            prompt_mode="chain_of_thought",
-            template: ChainOfThoughtTemplate = ...,
-            price: float,
-            tokenizer: GPT2Tokenizer,
-            max_tokens: int = 256,
-            max_rate: float = 60,
-            cache_dir: os.PathLike = None,
+        self,
+        *,
+        engine: str = "text-ada-001",
+        templates: Dict[str, PromptTemplate],
+        price: float,
+        tokenizer: GPT2Tokenizer,
+        max_rate: float = 60,
+        cache_dir: os.PathLike = None,
+        config: Optional[Dict] = None,
     ):
+
         self.engine = engine
-        self.template = template
+        self.templates = templates
         self.price = price
         self.tokenizer = tokenizer
-        self.prompt_mode = prompt_mode
-        self.max_tokens = max_tokens
         self.max_rate = max_rate
         self.cache = CachedFunction(cache_dir=cache_dir)
 
-        assert self.prompt_mode in {
-            "option_chain_of_thought",
-            "chain_of_thought",
-            "zero_shot",
-        }
+        if config is None:
+            config = yaml.safe_load(open(DEFAULT_CONFIG_PATH, "r").read())
+        self.config = config
+        rich.print(f"> Config:\n{self.config}")
 
         # state
         self.reset_stats()
+
+    def get_engine_args(self, **kwargs) -> Dict:
+        cfg = copy(self.config)
+        cfg.update(kwargs)
+        return cfg
 
     def reset_stats(self):
         self.total_cost = 0
@@ -118,28 +81,113 @@ class Reasoner(object):
         return bool(os.getenv("DRYRUN", default=False))
 
     def __repr__(self):
-        return (
-            f"Reasoner("
-            f"engine={self.engine}, "
-            f"prompt_mode={self.prompt_mode}, "
-            f"template={self.template})"
-        )
+        return f"Reasoner(" f"engine={self.engine}, " f"templates={self.templates})"
 
     def __call__(
-            self, eg: Example, shots: List[Example], **kwargs
+        self, eg: Example, shots: List[Example], **kwargs
     ) -> (str, Dict[str, Any]):
-        completed_prompt = ""
-        for shot in shots:
-            _, meta = self.process_example(
-                shot, completed_prompt=completed_prompt, simulate=True, **kwargs
-            )
-            completed_prompt = meta["completed_prompt"]
-            completed_prompt += "\n\n"
 
-        return self.process_example(eg, completed_prompt=completed_prompt, **kwargs)
+        # prepare the shots
+        completed_prompts = []
+        for shot in shots:
+            _, meta = self.process_example(shot, simulate=True, **kwargs)
+            completed_prompts.append(meta["completed_prompt"])
+        completed_prompt = "\n\n".join(completed_prompts)
+
+        # process the example
+        return self.process_example(eg, flow=completed_prompt, **kwargs)
 
     def process_example(
-            self, eg: Example, simulate: bool = False, completed_prompt: str = ""
+        self, eg: Example, simulate: bool = False, flow: str = ""
+    ) -> (List[str], Dict[str, Any]):
+        meta = {}
+        if len(self.templates) == 0:
+            raise ValueError("No template was provided.")
+
+        # run each reasoning step
+        answers = []
+        for key, prompt_template in self.templates.items():
+            rich.print(
+                f">>[green] Running: {key}, simulate={simulate} : {prompt_template}"
+            )
+            prompt = prompt_template(eg)
+            if simulate:
+                prompt_completion = prompt_template.simulate_completion(
+                    eg, **prompt_template.completion_config
+                )
+            else:
+                prompt_completion = self._get_prompt_completion(
+                    f"{flow}{prompt}", **prompt_template.completion_config
+                )
+            meta[prompt_template.name] = prompt_completion
+            rich.print(f">>[magenta] Got: {key} : {prompt_completion}")
+            flow += f"{prompt}{prompt_completion}"
+            rich.print(f"[white]{flow}")
+
+            # infer the answer
+            answer = prompt_template.infer_answer(
+                prompt_completion, eg=eg, pre_answer=flow[: -len(prompt_completion)]
+            )  # noqa
+            answers.append(answer)
+
+        meta["completed_prompt"] = flow
+        return answers, meta
+
+    def _get_prompt_completion(self, prompt, **kwargs) -> str:
+        self.throttle()
+
+        # arguments
+        engine_args = self.get_engine_args(**kwargs)
+        max_tokens = engine_args["max_tokens"]
+
+        # add the price of the prompt
+        self.total_cost += self.estimate_price(prompt)
+
+        # query the API
+        is_cached = False
+        if self.is_dryrun:
+            n_tokens = int(0.5 * max_tokens)  # expected number of tokens
+            rgn = np.random.RandomState(0)
+            tokens = rgn.randint(0, self.tokenizer.vocab_size, size=(n_tokens,))
+            tokens = tokens.tolist()
+            completion = self.tokenizer.decode(tokens)
+        else:
+            response, is_cached = self.cache(
+                openai.Completion.create,
+                engine=self.engine,
+                prompt=prompt,
+                **engine_args,
+            )
+            if len(response["choices"]) != 1:
+                raise NotImplementedError("Pricing is only implemented for one result")
+            completion = response["choices"][0]["text"]
+
+        # keep track of the calls (except when using cached results)
+        if not is_cached:
+            self.timestamp()
+            # add the price for the completion
+            self.total_cost += self.estimate_price(completion)
+
+        completion = completion.split("<|endoftext|>")[0]
+        return completion
+
+    def throttle(self):
+        """make sure to remains within the end-user rate limits
+        of no more than 60 requests per minute"""
+        RATE_BASE_DURATION = 60
+        last_calls = self.last_calls(RATE_BASE_DURATION)
+        if len(last_calls) >= self.max_rate - 1:
+            sleep_time = RATE_BASE_DURATION - (time.time() - last_calls[0])
+            time.sleep(max(0, sleep_time))
+
+    def estimate_price(self, prompt) -> float:
+        """estimate the price of each call"""
+        encoded_tokens = self.tokenizer.encode(prompt)
+        cost = len(encoded_tokens) * self.price / 1000
+        return cost
+
+    def __process_example(
+        self, eg: Example, simulate: bool = False, completed_prompt: str = ""
     ) -> (str, Dict[str, Any]):
         diagnostics = {}
         if self.prompt_mode == "chain_of_thought":
@@ -255,64 +303,3 @@ class Reasoner(object):
             return answer, diagnostics
         else:
             raise ValueError(f"Unknown prompt mode: {self.prompt_mode}")
-
-    def _get_prompt_completion(
-            self, prompt, stop="<|endoftext|>", max_tokens=None
-    ) -> str:
-        self.throttle()
-
-        if max_tokens is None:
-            max_tokens = self.max_tokens
-
-        # add the price of the prompt
-        self.total_cost += self.estimate_price(prompt)
-
-        # query the API
-        is_cached = False
-        if self.is_dryrun:
-            n_tokens = int(0.5 * max_tokens)  # expected number of tokens
-            rgn = np.random.RandomState(0)
-            tokens = rgn.randint(0, self.tokenizer.vocab_size, size=(n_tokens,))
-            tokens = tokens.tolist()
-            completion = self.tokenizer.decode(tokens)
-        else:
-            response, is_cached = self.cache(
-                openai.Completion.create,
-                engine=self.engine,
-                prompt=prompt,
-                temperature=0,  # todo: increase
-                max_tokens=max_tokens,
-                # max_tokens=512,
-                top_p=1,
-                # logprobs=5,
-                frequency_penalty=0.0,
-                presence_penalty=0.0,
-                stop=stop,
-            )
-            if len(response["choices"]) != 1:
-                raise NotImplementedError("Pricing is only implemented for one result")
-            completion = response["choices"][0]["text"]
-
-        # keep track of the calls (except when using cached results)
-        if not is_cached:
-            self.timestamp()
-            # add the price for the completion
-            self.total_cost += self.estimate_price(completion)
-
-        completion = completion.split("<|endoftext|>")[0]
-        return completion
-
-    def throttle(self):
-        """make sure to remains within the end-user rate limits
-        of no more than 60 requests per minute"""
-        RATE_BASE_DURATION = 60
-        last_calls = self.last_calls(RATE_BASE_DURATION)
-        if len(last_calls) >= self.max_rate - 1:
-            sleep_time = RATE_BASE_DURATION - (time.time() - last_calls[0])
-            time.sleep(max(0, sleep_time))
-
-    def estimate_price(self, prompt) -> float:
-        """estimate the price of each call"""
-        encoded_tokens = self.tokenizer.encode(prompt)
-        cost = len(encoded_tokens) * self.price / 1000
-        return cost

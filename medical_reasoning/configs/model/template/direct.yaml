@@ -1,3 +1,2 @@
 _target_: medical_reasoning.models.templates.MultipleChoiceTemplate
-identity: ${identity}
 use_documents: ${use_documents}

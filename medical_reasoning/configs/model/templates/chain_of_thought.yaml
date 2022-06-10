@@ -1,0 +1,3 @@
+defaults:
+  - /model/template/reasoning@reasoning
+  - /model/template/extraction@extraction

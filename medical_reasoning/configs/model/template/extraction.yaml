@@ -1,0 +1,3 @@
+defaults:
+  - direct
+_target_: medical_reasoning.models.templates.ExtractionMultipleChoiceTemplate

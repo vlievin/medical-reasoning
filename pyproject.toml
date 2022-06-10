@@ -18,6 +18,7 @@ sklearn = "^0.0"
 elasticsearch = "~7"
 transformers = "^4.19.2"
 pydantic = "^1.9.1"
+python-slugify = "^6.1.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "~3"

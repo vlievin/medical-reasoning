@@ -26,6 +26,7 @@ from omegaconf import open_dict
 from rich.table import Table
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import f1_score
+from slugify import slugify
 from tqdm import tqdm
 
 from medical_reasoning.datasets import DatasetBuilder
@@ -42,6 +43,7 @@ OmegaConf.register_new_resolver("if", lambda x, y, z: y if x else z)
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
 OmegaConf.register_new_resolver("hostname", socket.gethostname)
+OmegaConf.register_new_resolver("shorten", lambda x: str(slugify(x))[:32])
 
 warnings.filterwarnings(
     action="ignore",
@@ -123,8 +125,6 @@ def run(config: DictConfig) -> None:
         index = None
 
     # setting up OpenAI API
-    with open_dict(config):
-        config.model.template.options = allowed_options
     model: Reasoner = instantiate(config.model)
 
     output_dir = Path(os.getcwd()) / "output"

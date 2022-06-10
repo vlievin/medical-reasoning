@@ -3,7 +3,9 @@ from __future__ import annotations
 import abc
 import re
 from abc import ABC
+from copy import copy
 from typing import Any
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import T
@@ -12,6 +14,7 @@ import rich
 from loguru import logger
 
 from medical_reasoning.models.functional.infer_answer import infer_answer_from_choices
+from medical_reasoning.utils.datastruct import Example
 
 LINE_BRAKE = "\n"
 
@@ -29,121 +32,74 @@ def safe_min(lst: T) -> Optional[T]:
 
 
 class PromptTemplate(object):
+    name = "prompt"
+    _completion_config = {}
+
     @abc.abstractmethod
-    def format_question(self, *args, **kwargs) -> str:
+    def __call__(self, eg: Example) -> str:
         raise NotImplementedError()
 
+    @abc.abstractmethod
+    def simulate_completion(self, eg: Example, **kargs) -> str:
+        raise NotImplementedError()
 
-class ChainOfThoughtTemplate(PromptTemplate, ABC):
-    zero_shot_prompt = ...
-    reasoning_prompt = ...
-    extractive_prompt = ...
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}("
-            f"zero_shot_prompt={self.zero_shot_prompt}, "
-            f"reasoning_prompt={self.reasoning_prompt}, "
-            f"extractive_prompt={self.extractive_prompt}"
-            f")"
-        )
-
-    def make_zero_shot_prompt(self, *args, **kwargs) -> str:
-        question_prompt = self.format_question(*args, **kwargs)
-        return f"{question_prompt}\n\n{self.zero_shot_prompt}"
-
-    def make_reasoning_prompt(self, *args, **kwargs) -> str:
-        question_prompt = self.format_question(*args, **kwargs)
-        return f"{question_prompt}\n\n{self.reasoning_prompt}"
-
-    def make_extractive_prompt(self, completed_prompt: str) -> str:
-        return f"{completed_prompt}\n\n{self.extractive_prompt}"
-
+    @abc.abstractmethod
     def infer_answer(
         self,
-        extractive_prompt_answer,
+        prompt_answer: str,
         *,
-        options: Optional[List] = None,
+        eg: Example,
         pre_answer: Optional[str] = None,
     ) -> Any:
-        ...
+        raise NotImplementedError()
+
+    @property
+    def completion_config(self) -> Dict:
+        return copy(self._completion_config)
+
+    def __repr__(self):
+        return type(self).__name__
 
 
-class MultipleChoiceTemplate(ChainOfThoughtTemplate):
+class MultipleChoiceTemplate(PromptTemplate):
+    name = "multiple_choice_prompt"
+    first_symbol_pattern = "::A::"
+    last_symbol_pattern = "::D::"
+    SEP = "\n\n"
+
     def __init__(
         self,
-        options=None,
-        identity: str = "medical expert",
         use_documents: bool = False,
     ):
-        if options is None:
-            options = ["A", "B", "C", "D", "E"]
-        self.options = options
-        if identity in ("none", "null"):
-            identity = None
-        if identity is not None:
-            identity = identity.replace("_", " ").strip()
-        self.identity = identity
         self.use_documents = use_documents
 
-    @property
-    def reasoning_prompt(self):
-        # min_opt = self.options[0]
-        # max_opt = self.options[-1]
-        prompt = "Answer: Let's think step by step"
-        if self.identity is not None:
-            prompt = f"{prompt} like a {self.identity}"
-        # prompt = f"{prompt} to arrive at one of the options {min_opt}
-        # through {max_opt}"  # todo 46%
-        return f"{prompt}."
+    def __call__(self, eg: Example) -> str:
+        steps = [self.format_question(eg), self.zero_shot_prompt(eg)]
+        steps = [s for s in steps if len(s)]
+        return self.SEP.join(steps)
 
-    @property
-    def options_reasoning_prompt(self):
-        min_opt = self.options[0]
-        max_opt = self.options[-1]
-        prompt = f"Now, let's reflect on each option ({min_opt} through {max_opt})."
-        # prompt = f"Now, let's reflect on each option (from the least likely
-        # to the most likely option)."
-        # prompt = f"Now, let's eliminate options one-by-one until
-        # we find the correct one."
-        return prompt
+    @staticmethod
+    def zero_shot_prompt(eg: Example):
+        return (
+            f"Answer: among {eg.allowed_options[0]} "
+            f"through {eg.allowed_options[-1]}, the answer is"
+        )
 
-    def make_option_reasoning_prompt(self, completed_prompt: str) -> str:
-        return f"{completed_prompt}\n\n{self.options_reasoning_prompt}"
-
-    @property
-    def extractive_prompt(self):
-        min_opt = self.options[0]
-        max_opt = self.options[-1]
-        # return f"Therefore, all information considered,
-        # among {min_opt} through {max_opt}, the answer is"
-        return f"Therefore, among {min_opt} through {max_opt}, the answer is"
-
-    @property
-    def zero_shot_prompt(self):
-        min_opt = self.options[0]
-        max_opt = self.options[-1]
-        return f"A: among {min_opt} through {max_opt}, the answer is"
-
-    def format_question(
-        self,
-        question: str,
-        options: List[str],
-        documents: Optional[List] = None,
-        **kwargs,
-    ) -> str:
+    def format_question(self, eg: Example) -> str:
         prompt = ""
 
         if self.use_documents:
-            if documents is None or len(documents) == 0:
+            if eg.documents is None or len(eg.documents) == 0:
                 raise ValueError("documents must be provided if use_documents is True")
-            formatted_documents = "\n".join(documents)
+            formatted_documents = "\n".join(eg.documents)
             prompt += f"Context: {formatted_documents}\n\n"
 
         formatted_options = [
-            f"{self.options[i]}) {option}" for i, option in enumerate(options)
+            f"{eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)
         ]
-        prompt += f"Question: {question}\n\nAnswer options:\n{LINE_BRAKE.join(formatted_options)}"
+        prompt += (
+            f"Question: {eg.question}{self.SEP}{LINE_BRAKE.join(formatted_options)}"
+        )
 
         return prompt
 
@@ -151,13 +107,74 @@ class MultipleChoiceTemplate(ChainOfThoughtTemplate):
         self,
         prompt_answer: str,
         *,
-        options: Optional[List] = None,
+        eg: Example,
         pre_answer: Optional[str] = None,
     ) -> None | str:
 
         return infer_answer_from_choices(
             prompt_answer,
-            options=options,
-            option_symbols=self.options,
+            options=eg.options,
+            option_symbols=eg.allowed_options,
             pre_answer=pre_answer,
         )
+
+    def simulate_completion(self, eg: Example) -> str:
+        return f" {eg.answer_symbol}) {eg.answer}."
+
+
+class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
+    name = "reasoning_prompt"
+
+    def __init__(self, strategy: str = "Let's think step by step", **kwargs):
+        super(ReasoningMultipleChoiceTemplate, self).__init__(**kwargs)
+        if strategy in ("none", "null"):
+            strategy = None
+        if strategy is not None:
+            strategy = strategy.replace("_", " ").strip()
+        self.strategy = strategy
+
+    def format_strategy(self, eg: Example) -> str:
+        strategy = copy(self.strategy)
+        strategy = strategy.replace(self.first_symbol_pattern, eg.allowed_options[0])
+        strategy = strategy.replace(self.last_symbol_pattern, eg.allowed_options[-1])
+        return strategy
+
+    def __call__(self, eg: Example) -> str:
+        steps = [self.format_question(eg), self.format_strategy(eg)]
+        steps = [s for s in steps if len(s)]
+        return self.SEP.join(steps)
+
+    def simulate_completion(self, eg: Example) -> str:
+        return f"\n{eg.reasoning}"
+
+    def __repr__(self):
+        return f'{type(self).__name__}("{self.strategy}")'
+
+    def infer_answer(
+        self,
+        prompt_answer: str,
+        *,
+        eg: Example,
+        pre_answer: Optional[str] = None,
+    ) -> None | str:
+        return None
+
+
+class ExtractionMultipleChoiceTemplate(MultipleChoiceTemplate):
+    name = "extractive_prompt"
+    _completion_config = {"max_tokens": 32}
+
+    def __call__(self, eg: Example) -> str:
+        steps = [self.extractive_prompt(eg)]
+        steps = [s for s in steps if len(s)]
+        return self.SEP.join(steps)
+
+    @staticmethod
+    def extractive_prompt(eg: Example) -> str:
+        return (
+            f"\n\nTherefore, among {eg.allowed_options[0]} "
+            f"through {eg.allowed_options[-1]}, the answer is"
+        )
+
+    def simulate_completion(self, eg: Example) -> str:
+        return f" {eg.answer_symbol}) {eg.answer}."

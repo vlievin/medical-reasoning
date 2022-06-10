@@ -14,10 +14,8 @@ defaults:
   - override hydra/job_logging: colorlog
 
 
-
-exp_id: ${dataset.name}-${model.engine}-${model.prompt_mode}-${model.template.identity}${if:${use_documents},"-grounded",""}
-prompt_mode: "chain_of_thought"
-identity: "medical_expert"
+exp_id: ${dataset.name}-${model.engine}-${model.templates}-${shorten:${strategy}}${if:${use_documents},"-grounded",""}
+strategy: "Let's think step by step like a medical expert."
 use_documents: false
 topk: 1
 shots: 0
