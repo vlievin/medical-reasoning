@@ -170,7 +170,7 @@ def run(config: DictConfig) -> None:
             )
 
             # write the result to file
-            q_locator = f"{builder.name}_{split}_{row_idx}"
+            q_locator = f"{builder.name}_{eg.uid}"
             output_str = format_prediction(eg, pred, q_locator, flows=flows)
             with open(output_dir / f"{q_locator}_{pred.outcome}.txt", "w") as f:
                 f.write(output_str)
@@ -187,6 +187,7 @@ def run(config: DictConfig) -> None:
             "shots": int(config.shots),
             "n_docs": int(config.n_docs),
             "cost": float(model.total_cost),
+            "calls": int(model.n_calls),
         }
 
         # write data
@@ -208,7 +209,7 @@ def run(config: DictConfig) -> None:
         # print results
         with open(result_file.as_posix(), "r") as f:
             all_results = [json.loads(line) for line in f.readlines()]
-        table = format_results(all_results)
+        table = format_results_as_table(all_results)
         rich.print(table)
         rich.print(f">> Logged to {output_dir}")
 
@@ -334,7 +335,7 @@ def format_prediction(
     return output_str
 
 
-def format_results(all_results) -> Table:
+def format_results_as_table(all_results) -> Table:
     """Format the results of the experiment using `rich.table.Table`."""
     COLUMN_FORMATS = {
         "dataset": "<20",
@@ -347,10 +348,11 @@ def format_results(all_results) -> Table:
         "n_docs": "",
         "shots": "",
         "cost": ".2f",
+        "calls": "",
     }
 
     first_row = all_results[0]
-    keys = list(first_row.keys())
+    keys = [c for c in COLUMN_FORMATS.keys() if c in first_row.keys()]
     table = Table(title="Results")
     for key in keys:
         table.add_column(key, justify="center")

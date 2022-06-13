@@ -13,6 +13,7 @@ class Example(BaseModel):
     """A simple data structure for a single example."""
 
     question: str
+    uid: str
     options: List[str]
     documents: List[str] = None
     reasoning: Optional[str] = None
