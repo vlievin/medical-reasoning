@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+from collections import OrderedDict
 from copy import copy
 from pathlib import Path
 from typing import Any
@@ -60,7 +61,7 @@ class Reasoner(object):
     ):
 
         self.engine = engine
-        self.templates = templates
+        self.templates = OrderedDict(templates)
         self.verifier = verifier
         self.price = price
         self.tokenizer = tokenizer

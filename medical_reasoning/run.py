@@ -38,15 +38,19 @@ from medical_reasoning.utils.datastruct import Prediction
 SEPARATOR = "-" * 80 + "\n"
 
 OmegaConf.register_new_resolver("if", lambda x, y, z: y if x else z)
+OmegaConf.register_new_resolver("len", len)
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
 OmegaConf.register_new_resolver("hostname", socket.gethostname)
-OmegaConf.register_new_resolver("shorten", lambda x: str(slugify(x))[:32])
+OmegaConf.register_new_resolver("shorten", lambda x, y: str(slugify(x))[: int(y)])
 
 warnings.filterwarnings(
     action="ignore",
     category=ElasticsearchWarning,
 )
+
+
+hydra
 
 
 class FilterByLength(object):
@@ -117,7 +121,7 @@ def run(config: DictConfig) -> None:
     shots_dataset = make_shots_dataset(config)
 
     # setup the index
-    if config.use_documents:
+    if config.n_docs > 0:
         index: Optional[ElasticsearchIndex] = instantiate(config.index)
     else:
         index = None
@@ -181,7 +185,7 @@ def run(config: DictConfig) -> None:
             "engine": model.engine,
             "strategy": model.strategy,
             "shots": int(config.shots),
-            "grounded": str(config.use_documents),
+            "n_docs": int(config.n_docs),
             "cost": float(model.total_cost),
         }
 
@@ -294,7 +298,7 @@ def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConf
         base_query = eg.question
 
     queries = [f"{o} {base_query}" for o in eg.options]
-    results = index(queries, eg.options, k=config.topk)
+    results = index(queries, eg.options, k=config.n_docs)
     documents = []
     if len(results["text"]) != len(results["title"]):
         raise ValueError("text and title must be of the same length")
@@ -340,7 +344,7 @@ def format_results(all_results) -> Table:
         "f1": ".2%",
         "engine": "<20",
         "strategy": "<32",
-        "grounded": "<16",
+        "n_docs": "",
         "shots": "",
         "cost": ".2f",
     }
