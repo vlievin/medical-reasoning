@@ -29,6 +29,8 @@ def safe_min(lst: T) -> Optional[T]:
 
 class PromptTemplate(object):
     name = "prompt"
+    SEP = "\n\n"
+    can_be_simulated = True
     _completion_config = {}
 
     @abc.abstractmethod
@@ -66,7 +68,6 @@ class MultipleChoiceTemplate(PromptTemplate):
     name = "multiple_choice_prompt"
     first_symbol_pattern = "::A::"
     last_symbol_pattern = "::D::"
-    SEP = "\n\n"
 
     def __init__(
         self,
@@ -185,3 +186,58 @@ class ExtractionMultipleChoiceTemplate(MultipleChoiceTemplate):
 
     def simulate_completion(self, eg: Example) -> str:
         return f" {eg.answer_symbol}) {eg.answer}."
+
+
+class UncertaintyTemplate(PromptTemplate):
+    name = "uncertainty_prompt"
+    can_be_simulated = False
+    _completion_config = {"max_tokens": 32, "n": 1}
+
+    def __call__(self, eg: Example) -> str:
+        steps = [self.uncertainty_prompt(eg)]
+        steps = [s for s in steps if len(s)]
+        return self.SEP.join(steps)
+
+    @staticmethod
+    def uncertainty_prompt(eg: Example) -> str:
+        return "\nConfidence (from 1 to 5) and second most likely answer: "
+
+    def simulate_completion(self, eg: Example) -> str:
+        raise NotImplementedError(
+            "simulate_completion cannot be called on UncertaintyTemplate"
+        )
+
+    def infer_answer(
+        self,
+        prompt_answer: str,
+        *,
+        eg: Example,
+        pre_answer: Optional[str] = None,
+        **kwargs,
+    ) -> dict:
+
+        # extract the answer
+        answer = infer_answer_from_choices(
+            prompt_answer,
+            options=eg.options,
+            option_symbols=eg.allowed_options,
+            pre_answer=None,
+        )
+
+        # extract the confidence
+        pseudo_eg = Example(
+            question="",
+            options=5 * [""],
+            documents=[],
+            reasoning=None,
+            allowed_options=["1", "2", "3", "4", "5"],
+            answer_idx=-1,
+        )
+        confidence = infer_answer_from_choices(
+            prompt_answer,
+            options=pseudo_eg.options,
+            option_symbols=pseudo_eg.allowed_options,
+            pre_answer=None,
+        )
+
+        return {"confidence": confidence, "second_answer": answer}

@@ -1,5 +1,5 @@
 defaults:
-  - templates: chain_of_thought
+  - templates: cot
   - config: default
   - verifier: majority
 

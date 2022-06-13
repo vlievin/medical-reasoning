@@ -137,7 +137,7 @@ class Reasoner(object):
     ) -> (List[str], List[str]):
         prompt = template(eg)
         engine_args = self.get_engine_args(**template.completion_config)
-        if simulate:
+        if simulate and template.can_be_simulated:
             # enforce returning only one sample
             engine_args = copy(engine_args)
             engine_args["n"] = 1
@@ -249,7 +249,8 @@ class Reasoner(object):
 
         # keep track of the calls (except when using cached results)
         if not is_cached:
-            self.timestamp()
+            if not self.is_dryrun:
+                self.timestamp()
             # add the price for the completion
             max_price = max([self.estimate_price(c) for c in completions])
             self.total_cost += max_price * len(completions)
