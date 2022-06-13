@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import socket
-import time
 import warnings
 from pathlib import Path
 from typing import Any
@@ -22,7 +21,6 @@ from hydra.utils import instantiate
 from loguru import logger
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
-from omegaconf import open_dict
 from rich.table import Table
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import f1_score
@@ -144,7 +142,6 @@ def run(config: DictConfig) -> None:
         for i, row_idx in (
             pbar := tqdm(enumerate(indices), unit="question", total=len(indices))
         ) :
-
             # get the row of data, validate and potentially sample documents
             eg = make_eg(dset[row_idx], allowed_options, index=index, config=config)
 
@@ -154,8 +151,7 @@ def run(config: DictConfig) -> None:
             )
 
             # process the Example with the model
-            prediction_str, meta = model(eg, shots=shots)
-            pred = Prediction(prediction_str=prediction_str, example=eg, meta=meta)
+            pred, flows = model(eg, shots=shots)
 
             # update the trackers
             labels.append(eg.answer_idx)
@@ -171,7 +167,7 @@ def run(config: DictConfig) -> None:
 
             # write the result to file
             q_locator = f"{builder.name}_{split}_{row_idx}"
-            output_str = format_prediction(eg, pred, q_locator)
+            output_str = format_prediction(eg, pred, q_locator, flows=flows)
             with open(output_dir / f"{q_locator}_{pred.outcome}.txt", "w") as f:
                 f.write(output_str)
 
@@ -183,8 +179,7 @@ def run(config: DictConfig) -> None:
             "accuracy": accuracy_score(labels, preds),
             "f1": f1_score(labels, preds, average="macro"),
             "engine": model.engine,
-            "prompt_mode": model.prompt_mode,
-            "identity": str(model.template.identity),
+            "strategy": model.strategy,
             "shots": int(config.shots),
             "grounded": str(config.use_documents),
             "cost": float(model.total_cost),
@@ -313,18 +308,24 @@ def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConf
     return eg.copy(update={"documents": documents})
 
 
-def format_prediction(eg: Example, pred: Prediction, q_locator: str) -> str:
+def format_prediction(
+    eg: Example, pred: Prediction, q_locator: str, flows: List[str]
+) -> str:
     """Format the prediction for a given example."""
     formatted_options = "\n".join(
         [f"   {eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)]
     )
+    formatted_flows = ""
+    for i, flow in enumerate(flows):
+        _sep = "." * len(SEPARATOR)
+        formatted_flows += f"[Flow {i + 1}]\n{_sep}\n{flow}\n"
     output_str = (
         f"Outcome: {pred.outcome}\n{SEPARATOR}\n"
         f"Answer: {eg.answer_symbol}: {eg.options[eg.answer_idx]}\n"
         f"Prediction: {pred.label}: {pred.full}\n{SEPARATOR}\n"
         f"Question [{q_locator}]:\n{eg.question}\n\n"
         f"Options:\n{formatted_options}\n{SEPARATOR}\n"
-        f"Reasoning: \n\n{pred.meta['completed_prompt']}\n"
+        f"Reasonings: \n\n{formatted_flows}\n"
     )
     return output_str
 
@@ -338,8 +339,7 @@ def format_results(all_results) -> Table:
         "accuracy": ".2%",
         "f1": ".2%",
         "engine": "<20",
-        "prompt_mode": "<20",
-        "identity": "<20",
+        "strategy": "<32",
         "grounded": "<16",
         "shots": "",
         "cost": ".2f",

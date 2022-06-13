@@ -1,9 +1,11 @@
 import os
+import shutil
 from copy import copy
 from pathlib import Path
 from typing import Any
 from typing import Callable
 
+import click
 import dill
 from datasets.fingerprint import Hasher
 
@@ -21,8 +23,21 @@ def update_hash(obj: Any, hasher: Hasher):
 
 
 class CachedFunction(object):
-    def __init__(self, cache_dir: os.PathLike):
+    def __init__(self, cache_dir: os.PathLike, reset_cache: bool = False):
         self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(exist_ok=True, parents=True)
+
+        if reset_cache:
+            if self.cache_dir.exists():
+                n_files = len(list(self.cache_dir.iterdir()))
+                size = sum(f.stat().st_size for f in self.cache_dir.iterdir())
+                msg = (
+                    f"Are you sure you want to erase the cache "
+                    f"({n_files} files, {size / 1e6} MB)?"
+                )
+                if click.confirm(msg, default=False):
+                    shutil.rmtree(self.cache_dir)
+                    self.cache_dir.mkdir(exist_ok=True, parents=True)
 
     def __call__(self, fn: Callable, *args, **kwargs) -> (Any, bool):
 

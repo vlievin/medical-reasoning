@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import time
 from copy import copy
@@ -9,16 +11,16 @@ from typing import Optional
 
 import numpy as np
 import openai
-import rich
 import yaml
 from dotenv import load_dotenv
 from transformers import GPT2Tokenizer
 
 from medical_reasoning import configs
 from medical_reasoning.models.cache import CachedFunction
-from medical_reasoning.models.templates import MultipleChoiceTemplate
 from medical_reasoning.models.templates import PromptTemplate
+from medical_reasoning.models.verifiers import Verifier
 from medical_reasoning.utils.datastruct import Example
+from medical_reasoning.utils.datastruct import Prediction
 
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -28,33 +30,53 @@ DEFAULT_CONFIG_PATH = (
 )
 
 
+def extend_flows(flows: str | List, flows_: List[str]) -> List:
+    if isinstance(flows, str):
+        return [flows + f_ for f_ in flows_]
+    elif isinstance(flows, list):
+        return [extend_flows(f, flows_) for f in flows]
+
+
+def flatten(x: List | Any) -> List | Any:
+    if isinstance(x, (list, set, tuple)):
+        return [j for i in x for j in flatten(i)]
+    else:
+        return [x]
+
+
 class Reasoner(object):
     def __init__(
         self,
         *,
         engine: str = "text-ada-001",
         templates: Dict[str, PromptTemplate],
+        verifier: Verifier,
         price: float,
         tokenizer: GPT2Tokenizer,
         max_rate: float = 60,
         cache_dir: os.PathLike = None,
+        reset_cache: bool = False,
         config: Optional[Dict] = None,
     ):
 
         self.engine = engine
         self.templates = templates
+        self.verifier = verifier
         self.price = price
         self.tokenizer = tokenizer
         self.max_rate = max_rate
-        self.cache = CachedFunction(cache_dir=cache_dir)
+        self.cache = CachedFunction(cache_dir=cache_dir, reset_cache=reset_cache)
 
         if config is None:
             config = yaml.safe_load(open(DEFAULT_CONFIG_PATH, "r").read())
         self.config = config
-        rich.print(f"> Config:\n{self.config}")
 
         # state
         self.reset_stats()
+
+    @property
+    def strategy(self) -> str:
+        return "+".join([template.description for template in self.templates.values()])
 
     def get_engine_args(self, **kwargs) -> Dict:
         cfg = copy(self.config)
@@ -81,7 +103,13 @@ class Reasoner(object):
         return bool(os.getenv("DRYRUN", default=False))
 
     def __repr__(self):
-        return f"Reasoner(" f"engine={self.engine}, " f"templates={self.templates})"
+        return (
+            f"Reasoner("
+            f"engine={self.engine}, "
+            f"templates={self.templates}, "
+            f"verifier={self.verifier}"
+            f")"
+        )
 
     def __call__(
         self, eg: Example, shots: List[Example], **kwargs
@@ -90,55 +118,116 @@ class Reasoner(object):
         # prepare the shots
         completed_prompts = []
         for shot in shots:
-            _, meta = self.process_example(shot, simulate=True, **kwargs)
-            completed_prompts.append(meta["completed_prompt"])
+            _, flows = self.process_example(shot, simulate=True, **kwargs)
+            completed_prompts.extend(flows)
         completed_prompt = "\n\n".join(completed_prompts)
 
         # process the example
         return self.process_example(eg, flow=completed_prompt, **kwargs)
 
+    def apply_template(
+        self,
+        template: PromptTemplate,
+        *,
+        eg: Example,
+        simulate: bool = False,
+        flow: str,
+        meta: Dict,
+    ) -> (List[str], List[str]):
+        prompt = template(eg)
+        engine_args = self.get_engine_args(**template.completion_config)
+        if simulate:
+            # enforce returning only one sample
+            engine_args = copy(engine_args)
+            engine_args["n"] = 1
+
+            # simulate the completion
+            prompt_completion = template.simulate_completion(eg, **engine_args)
+            prompt_completions = [prompt_completion]
+        else:
+            prompt_completions = self.get_prompt_completions(
+                f"{flow}{prompt}", **engine_args
+            )
+
+        # store the prompt completions
+        completion_key = f"{template.name}.completions"
+        if completion_key in meta:
+            meta[completion_key].extend(prompt_completions)
+        else:
+            meta[completion_key] = prompt_completions
+
+        # infer the answers
+        answers = [
+            template.infer_answer(
+                prompt_completion, eg=eg, pre_answer=flow[: -len(prompt_completion)]
+            )
+            for prompt_completion in prompt_completions
+        ]
+
+        # store the answers
+        answer_key = f"{template.name}.answers"
+        if answer_key in meta:
+            meta[answer_key].extend(answers)
+        else:
+            meta[answer_key] = answers
+
+        # extend the flow
+        flows_extensions = [
+            f"{prompt}{prompt_completion}" for prompt_completion in prompt_completions
+        ]
+        flows = extend_flows(flow, flows_extensions)
+        return flows, answers
+
+    def apply_templates(
+        self,
+        templates: list[PromptTemplate],
+        *,
+        flows: str | List,
+        **kwargs,
+    ) -> (List, List[List[str]]):
+        answers = []
+        for template_i in templates:
+            output_flows_i = []
+            answers_i = []
+            for flow in flows:
+                output_flows_ij, answers_ij = self.apply_template(
+                    template_i, flow=flow, **kwargs
+                )
+                output_flows_i.extend(output_flows_ij)
+                answers_i.extend(answers_ij)
+
+            # update the flows and the answers
+            flows = output_flows_i
+            answers.append(answers_i)
+
+        return flows, answers
+
     def process_example(
         self, eg: Example, simulate: bool = False, flow: str = ""
-    ) -> (List[str], Dict[str, Any]):
+    ) -> (Prediction, List[str]):
         meta = {}
         if len(self.templates) == 0:
             raise ValueError("No template was provided.")
 
         # run each reasoning step
-        answers = []
-        for key, prompt_template in self.templates.items():
-            rich.print(
-                f">>[green] Running: {key}, simulate={simulate} : {prompt_template}"
-            )
-            prompt = prompt_template(eg)
-            if simulate:
-                prompt_completion = prompt_template.simulate_completion(
-                    eg, **prompt_template.completion_config
-                )
-            else:
-                prompt_completion = self._get_prompt_completion(
-                    f"{flow}{prompt}", **prompt_template.completion_config
-                )
-            meta[prompt_template.name] = prompt_completion
-            rich.print(f">>[magenta] Got: {key} : {prompt_completion}")
-            flow += f"{prompt}{prompt_completion}"
-            rich.print(f"[white]{flow}")
+        flows, answers = self.apply_templates(
+            templates=list(self.templates.values()),
+            flows=[flow],
+            eg=eg,
+            simulate=simulate,
+            meta=meta,
+        )
 
-            # infer the answer
-            answer = prompt_template.infer_answer(
-                prompt_completion, eg=eg, pre_answer=flow[: -len(prompt_completion)]
-            )  # noqa
-            answers.append(answer)
+        # infer the answer and returns with the completed flows
+        prediction = self.verifier(answers, eg=eg, meta=meta)
+        return prediction, flows
 
-        meta["completed_prompt"] = flow
-        return answers, meta
-
-    def _get_prompt_completion(self, prompt, **kwargs) -> str:
+    def get_prompt_completions(self, prompt, **kwargs) -> List[str]:
         self.throttle()
 
         # arguments
-        engine_args = self.get_engine_args(**kwargs)
-        max_tokens = engine_args["max_tokens"]
+        max_tokens = kwargs["max_tokens"]
+        n = kwargs["n"]
 
         # add the price of the prompt
         self.total_cost += self.estimate_price(prompt)
@@ -147,28 +236,37 @@ class Reasoner(object):
         is_cached = False
         if self.is_dryrun:
             n_tokens = int(0.5 * max_tokens)  # expected number of tokens
-            rgn = np.random.RandomState(0)
-            tokens = rgn.randint(0, self.tokenizer.vocab_size, size=(n_tokens,))
-            tokens = tokens.tolist()
-            completion = self.tokenizer.decode(tokens)
+            completions = [self._simulate_completion(n_tokens) for _ in range(n)]
         else:
             response, is_cached = self.cache(
                 openai.Completion.create,
                 engine=self.engine,
                 prompt=prompt,
-                **engine_args,
+                **kwargs,
             )
-            if len(response["choices"]) != 1:
-                raise NotImplementedError("Pricing is only implemented for one result")
-            completion = response["choices"][0]["text"]
+            completions = [row["text"] for row in response["choices"]]
 
         # keep track of the calls (except when using cached results)
         if not is_cached:
             self.timestamp()
             # add the price for the completion
-            self.total_cost += self.estimate_price(completion)
+            max_price = max([self.estimate_price(c) for c in completions])
+            self.total_cost += max_price * len(completions)
 
-        completion = completion.split("<|endoftext|>")[0]
+        completions = self._cleanup_completions(completions)
+        return completions
+
+    def _cleanup_completions(self, completions):
+        completions = [
+            completion.split("<|endoftext|>")[0] for completion in completions
+        ]
+        return completions
+
+    def _simulate_completion(self, n_tokens):
+        rgn = np.random.RandomState(0)
+        tokens = rgn.randint(0, self.tokenizer.vocab_size, size=(n_tokens,))
+        tokens = tokens.tolist()
+        completion = self.tokenizer.decode(tokens)
         return completion
 
     def throttle(self):
@@ -185,121 +283,3 @@ class Reasoner(object):
         encoded_tokens = self.tokenizer.encode(prompt)
         cost = len(encoded_tokens) * self.price / 1000
         return cost
-
-    def __process_example(
-        self, eg: Example, simulate: bool = False, completed_prompt: str = ""
-    ) -> (str, Dict[str, Any]):
-        diagnostics = {}
-        if self.prompt_mode == "chain_of_thought":
-            # reasoning step
-            reasoning_prompt = self.template.make_reasoning_prompt(
-                eg.question,
-                options=eg.options,
-                documents=eg.documents,
-            )
-            reasoning_prompt = completed_prompt + reasoning_prompt
-            if simulate:
-                gold_reasoning = eg.reasoning
-                if gold_reasoning is None or len(gold_reasoning) == 0:
-                    raise ValueError("Reasoning must be known to run simulations")
-                reasoning_answer = f"\n{gold_reasoning}"
-            else:
-                reasoning_answer = self._get_prompt_completion(reasoning_prompt)
-            # todo: make this cleaner
-            if not simulate or len(reasoning_answer) > 10:
-                completed_prompt = reasoning_prompt + reasoning_answer
-            diagnostics["reasoning"] = reasoning_answer.strip()
-
-            # extractive step
-            extractive_prompt = self.template.make_extractive_prompt(completed_prompt)
-            if simulate:
-                extractive_answer = f" {eg.answer_symbol}) {eg.answer}."
-            else:
-                extractive_answer = self._get_prompt_completion(
-                    extractive_prompt,
-                    max_tokens=32,
-                )
-            completed_prompt = extractive_prompt + extractive_answer
-            diagnostics["answer"] = extractive_answer.strip()
-
-            # extract the answer and return
-            answer = self.template.infer_answer(
-                extractive_answer, options=eg.options, pre_answer=reasoning_answer
-            )
-            diagnostics["completed_prompt"] = completed_prompt
-            return answer, diagnostics
-        elif self.prompt_mode == "option_chain_of_thought":
-            if not isinstance(self.template, MultipleChoiceTemplate):
-                raise TypeError(
-                    f"{self.prompt_mode} is only "
-                    f"compatible with MultipleChoiceTemplate"
-                )
-            # reasoning step
-            reasoning_prompt = self.template.make_reasoning_prompt(
-                eg.question,
-                options=eg.options,
-                documents=eg.documents,
-            )
-            reasoning_prompt = completed_prompt + reasoning_prompt
-            if simulate:
-                gold_reasoning = eg.reasoning
-                if gold_reasoning is None or len(gold_reasoning) == 0:
-                    raise ValueError("Reasoning must be known to run simulations")
-                reasoning_answer = f"\n{gold_reasoning}"
-            else:
-                reasoning_answer = self._get_prompt_completion(reasoning_prompt)
-            # todo: make this cleaner
-            if not simulate or len(reasoning_answer) > 10:
-                completed_prompt = reasoning_prompt + reasoning_answer
-            diagnostics["reasoning"] = reasoning_answer.strip()
-
-            # option evaluation step
-            option_eval_prompt = self.template.make_option_reasoning_prompt(
-                completed_prompt
-            )
-            option_eval_answer = self._get_prompt_completion(option_eval_prompt)
-            completed_prompt = option_eval_prompt + option_eval_answer
-            diagnostics["option_eval"] = option_eval_answer.strip()
-
-            # extractive step
-            extractive_prompt = self.template.make_extractive_prompt(completed_prompt)
-            if simulate:
-                extractive_answer = f" {eg.answer_symbol}) {eg.answer}."
-            else:
-                extractive_answer = self._get_prompt_completion(
-                    extractive_prompt,
-                    max_tokens=32,
-                )
-            completed_prompt = extractive_prompt + extractive_answer
-            diagnostics["answer"] = extractive_answer.strip()
-
-            # extract the answer and return
-            answer = self.template.infer_answer(
-                extractive_answer, options=eg.options, pre_answer=reasoning_answer
-            )
-            diagnostics["completed_prompt"] = completed_prompt
-            return answer, diagnostics
-        elif self.prompt_mode == "zero_shot":
-            zero_shot_prompt = self.template.make_zero_shot_prompt(
-                eg.question,
-                options=eg.options,
-                documents=eg.documents,
-            )
-            zero_shot_prompt = completed_prompt + zero_shot_prompt
-            if simulate:
-                zero_shot_answer = f" {eg.answer_symbol}) {eg.answer}."
-            else:
-                zero_shot_answer = self._get_prompt_completion(
-                    zero_shot_prompt,
-                    max_tokens=32,
-                )
-
-            diagnostics["answer"] = zero_shot_answer.strip()
-
-            # extract the answer and return
-            answer = self.template.infer_answer(zero_shot_answer, options=eg.options)
-            full_answer = zero_shot_prompt + zero_shot_answer
-            diagnostics["completed_prompt"] = full_answer
-            return answer, diagnostics
-        else:
-            raise ValueError(f"Unknown prompt mode: {self.prompt_mode}")

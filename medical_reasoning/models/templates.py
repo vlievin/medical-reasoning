@@ -2,16 +2,12 @@ from __future__ import annotations
 
 import abc
 import re
-from abc import ABC
 from copy import copy
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import T
-
-import rich
-from loguru import logger
 
 from medical_reasoning.models.functional.infer_answer import infer_answer_from_choices
 from medical_reasoning.utils.datastruct import Example
@@ -50,6 +46,7 @@ class PromptTemplate(object):
         *,
         eg: Example,
         pre_answer: Optional[str] = None,
+        **kwargs,
     ) -> Any:
         raise NotImplementedError()
 
@@ -59,6 +56,10 @@ class PromptTemplate(object):
 
     def __repr__(self):
         return type(self).__name__
+
+    @property
+    def description(self) -> str:
+        return self.__class__.__name__
 
 
 class MultipleChoiceTemplate(PromptTemplate):
@@ -109,6 +110,7 @@ class MultipleChoiceTemplate(PromptTemplate):
         *,
         eg: Example,
         pre_answer: Optional[str] = None,
+        **kwargs,
     ) -> None | str:
 
         return infer_answer_from_choices(
@@ -133,6 +135,10 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
             strategy = strategy.replace("_", " ").strip()
         self.strategy = strategy
 
+    @property
+    def description(self) -> str:
+        return f"{self.strategy}"
+
     def format_strategy(self, eg: Example) -> str:
         strategy = copy(self.strategy)
         strategy = strategy.replace(self.first_symbol_pattern, eg.allowed_options[0])
@@ -156,13 +162,14 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
         *,
         eg: Example,
         pre_answer: Optional[str] = None,
+        **kwargs,
     ) -> None | str:
         return None
 
 
 class ExtractionMultipleChoiceTemplate(MultipleChoiceTemplate):
     name = "extractive_prompt"
-    _completion_config = {"max_tokens": 32}
+    _completion_config = {"max_tokens": 32, "n": 1}
 
     def __call__(self, eg: Example) -> str:
         steps = [self.extractive_prompt(eg)]

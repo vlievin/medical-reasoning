@@ -1,8 +1,8 @@
+from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 
-import rich
 from loguru import logger
 from pydantic import BaseModel
 from pydantic import root_validator
@@ -64,7 +64,7 @@ class Prediction(BaseModel):
 
     prediction_str: Optional[str]
     example: Example
-    meta: Optional[Dict[str, str]]
+    meta: Optional[Dict[str, Any]]
     prediction_idx: int = -1
     label: str = "N/A"
 
