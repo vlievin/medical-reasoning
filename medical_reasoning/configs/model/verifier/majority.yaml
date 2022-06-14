@@ -1,2 +1,2 @@
 _target_: medical_reasoning.models.verifiers.MajorityVotingVerifier
-template_idx: 1
+template_idx: -1

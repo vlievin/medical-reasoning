@@ -200,7 +200,10 @@ class UncertaintyTemplate(PromptTemplate):
 
     @staticmethod
     def uncertainty_prompt(eg: Example) -> str:
-        return "\nConfidence (from 1 to 5) and second most likely answer: "
+        return (
+            "\n\nRate your confidence on a grade from 1 to 5 "
+            "and give the second most likely answer:"
+        )
 
     def simulate_completion(self, eg: Example) -> str:
         raise NotImplementedError(
@@ -227,6 +230,7 @@ class UncertaintyTemplate(PromptTemplate):
         # extract the confidence
         pseudo_eg = Example(
             question="",
+            uid="",
             options=5 * [""],
             documents=[],
             reasoning=None,
