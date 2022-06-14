@@ -5,7 +5,6 @@ import json
 from collections import Counter
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import rich
 import yaml
@@ -61,14 +60,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "-p", "--path", help="path to the experiment data", required=True
     )
+    parser.add_argument("-m", "--metric", help="metric to maximize", default="f1")
     parser.add_argument(
-        "-n", "--max_perm", help="Maximum permutation budget", default=5
+        "-n", "--max_perm", help="Maximum permutation budget", default=4
     )
     args = parser.parse_args()
     rich.print(args)
     multirun_path = Path(args.path)
     logger.info(
-        f"Loading data from {multirun_path.absolute()}, max. permutations={args.max_perm}"
+        f"Loading data from {multirun_path.absolute()}, "
+        f"max. permutations={args.max_perm}, metric={args.metric}"
     )
 
     # placeholders for the data + parameters
@@ -115,7 +116,7 @@ if __name__ == "__main__":
     ].values.tolist()
     expert_data = []
     cache_size = 1_000
-    max_acc = 0
+    max_score = 0
     best_strategies = None
     for budget in range(1, args.max_perm + 1):
         idx = 0
@@ -128,18 +129,19 @@ if __name__ == "__main__":
             ) :
                 output = get_majority_perfs(records, perm_strategies)
                 output["idx"] = idx
-                if output["accuracy"] > max_acc:
-                    max_acc = output["accuracy"]
+                if output[args.metric] > max_score:
+                    max_score = output[args.metric]
                     best_strategies = perm_strategies
                     pbar.set_description(
-                        f"Budget={budget} (Best: {max_acc:.2f}, n={len(best_strategies)})"
+                        f"Budget={budget} (Best: {args.metric}={max_score:.2%}, "
+                        f"n={len(best_strategies)})"
                     )
 
                 # store and truncate
                 expert_data.append(output)
                 if len(expert_data) > cache_size:
                     expert_data = list(
-                        sorted(expert_data, key=lambda x: x["accuracy"], reverse=True)
+                        sorted(expert_data, key=lambda x: x[args.metric], reverse=True)
                     )[:cache_size]
 
                 # increment
@@ -148,7 +150,8 @@ if __name__ == "__main__":
             pass
 
     # write to file
-    expert_data = pd.DataFrame(expert_data).sort_values("accuracy", ascending=False)
+    # todo: write strategies, remove duplicates
+    expert_data = pd.DataFrame(expert_data).sort_values(args.metric, ascending=False)
     with pd.option_context("max_colwidth", 1000):
         expert_data.to_latex(
             buf=multirun_path / "experts-permutations.tex",
@@ -157,7 +160,7 @@ if __name__ == "__main__":
             index=False,
         )
 
-    logger.info(f"Best strategies - Accuracy: {max_acc:.2%})")
+    logger.info(f"Best strategies - {args.metric}: {max_score:.2%})")
     for i, strat in enumerate(best_strategies):
         logger.info(f" - {i}: {strat}")
     rich.print(expert_data)
