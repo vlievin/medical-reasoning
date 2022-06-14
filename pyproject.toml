@@ -27,6 +27,9 @@ poethepoet = "^0.13.1"
 pre-commit = "^2.19.0"
 hydra-colorlog = "^1.2.0"
 parameterized = "^0.8.1"
+jupyter = "^1.0.0"
+seaborn = "^0.11.2"
+matplotlib = "^3.5.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
