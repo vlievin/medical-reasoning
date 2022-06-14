@@ -48,3 +48,4 @@ subset_exps = "experiment -m model=davinci dataset=medmcqa,headqa,medqa_us datas
 strategies = "experiment -m dataset=medqa_us dataset.splits=validation dataset.subset=100 'strategy=glob(strat_*)'"
 styles = "experiment -m dataset=medqa_us dataset.splits=validation dataset.subset=100 strategy=strat_4,strat_7 prompt_style=none,short,full"
 full_exps = "experiment -m model=davinci model.prompt_mode=zero_shot,chain_of_thought model.template.identity=medical_expert use_documents=false,true dataset=pubmedqa,medqa_us,medmcqa"
+find_combinations = "python -m scripts.find_combinations"
