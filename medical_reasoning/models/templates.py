@@ -13,6 +13,7 @@ from medical_reasoning.models.functional.infer_answer import infer_answer_from_c
 from medical_reasoning.utils.datastruct import Example
 
 LINE_BRAKE = "\n"
+ACCEPTED_STYLES = {"full", "short", "none"}
 
 
 def get_start_indices(target: str | List, pattern: str) -> list[int]:
@@ -32,6 +33,13 @@ class PromptTemplate(object):
     SEP = "\n\n"
     can_be_simulated = True
     _completion_config = {}
+
+    def __init__(self, *, style: str = "full"):
+        if style not in ACCEPTED_STYLES:
+            raise ValueError(
+                f"style {style} is not recognized. Accepted styles are: {ACCEPTED_STYLES}"
+            )
+        self.style = style
 
     @abc.abstractmethod
     def __call__(self, eg: Example) -> str:
@@ -72,7 +80,9 @@ class MultipleChoiceTemplate(PromptTemplate):
     def __init__(
         self,
         use_documents: bool = False,
+        **kwargs,
     ):
+        super().__init__(**kwargs)
         self.use_documents = use_documents
 
     def __call__(self, eg: Example) -> str:
@@ -80,10 +90,17 @@ class MultipleChoiceTemplate(PromptTemplate):
         steps = [s for s in steps if len(s)]
         return self.SEP.join(steps)
 
-    @staticmethod
-    def zero_shot_prompt(eg: Example):
+    def zero_shot_prompt(self, eg: Example):
+
+        # select the preprompt
+        prepromt = {
+            "full": "Answer: ",
+            "short": "A: ",
+            "none": "",
+        }[self.style]
+
         return (
-            f"Answer: among {eg.allowed_options[0]} "
+            f"{prepromt}among {eg.allowed_options[0]} "
             f"through {eg.allowed_options[-1]}, the answer is"
         )
 
@@ -99,8 +116,16 @@ class MultipleChoiceTemplate(PromptTemplate):
         formatted_options = [
             f"{eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)
         ]
+
+        # select the preprompt
+        prepromt = {
+            "full": "Question: ",
+            "short": "Q: ",
+            "none": "",
+        }[self.style]
+
         prompt += (
-            f"Question: {eg.question}{self.SEP}{LINE_BRAKE.join(formatted_options)}"
+            f"{prepromt}{eg.question}{self.SEP}{LINE_BRAKE.join(formatted_options)}"
         )
 
         return prompt
@@ -141,10 +166,19 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
         return f"{self.strategy}"
 
     def format_strategy(self, eg: Example) -> str:
+        # format the strategy
         strategy = copy(self.strategy)
         strategy = strategy.replace(self.first_symbol_pattern, eg.allowed_options[0])
         strategy = strategy.replace(self.last_symbol_pattern, eg.allowed_options[-1])
-        return strategy
+
+        # select the preprompt
+        prepromt = {
+            "full": "Answer: ",
+            "short": "A: ",
+            "none": "",
+        }[self.style]
+
+        return f"{prepromt}{strategy}"
 
     def __call__(self, eg: Example) -> str:
         steps = [self.format_question(eg), self.format_strategy(eg)]
@@ -187,6 +221,10 @@ class ExtractionMultipleChoiceTemplate(MultipleChoiceTemplate):
     def simulate_completion(self, eg: Example) -> str:
         return f" {eg.answer_symbol}) {eg.answer}."
 
+    @property
+    def description(self) -> str:
+        return "extraction"
+
 
 class UncertaintyTemplate(PromptTemplate):
     name = "uncertainty_prompt"
@@ -198,10 +236,15 @@ class UncertaintyTemplate(PromptTemplate):
         steps = [s for s in steps if len(s)]
         return self.SEP.join(steps)
 
-    @staticmethod
-    def uncertainty_prompt(eg: Example) -> str:
+    def uncertainty_prompt(self, eg: Example) -> str:
+
+        prepromt = {
+            "full": "Confidence: ",
+            "short": "",
+            "none": "",
+        }[self.style]
         return (
-            "\n\nRate your confidence on a grade from 1 to 5 "
+            f"\n\n{prepromt}Rate your confidence on a grade from 1 to 5 "
             "and give the second most likely answer:"
         )
 
@@ -218,7 +261,6 @@ class UncertaintyTemplate(PromptTemplate):
         pre_answer: Optional[str] = None,
         **kwargs,
     ) -> dict:
-
         # extract the answer
         answer = infer_answer_from_choices(
             prompt_answer,
@@ -245,3 +287,7 @@ class UncertaintyTemplate(PromptTemplate):
         )
 
         return {"confidence": confidence, "second_answer": answer}
+
+    @property
+    def description(self) -> str:
+        return "uncertainty"

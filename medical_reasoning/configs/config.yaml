@@ -16,6 +16,7 @@ defaults:
 
 
 exp_id: ${dataset.name}-${model.engine}-${len:${model.templates}}steps-${n_docs}doc-${shots}shots-${shorten:${strategy.prompt},32}
+prompt_style: full
 n_docs: 0
 shots: 0
 

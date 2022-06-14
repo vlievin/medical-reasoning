@@ -1,1 +1,4 @@
+defaults:
+  - base
+
 _target_: medical_reasoning.models.templates.UncertaintyTemplate
