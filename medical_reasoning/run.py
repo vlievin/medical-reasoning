@@ -140,6 +140,7 @@ def run(config: DictConfig) -> None:
         dset = dataset[split]
         labels = []
         preds = []
+        locators = []
         indices = list(range(len(dset)))
         rgn = np.random.RandomState(0)
         rgn.shuffle(indices)
@@ -171,6 +172,7 @@ def run(config: DictConfig) -> None:
 
             # write the result to file
             q_locator = f"{builder.name}_{eg.uid}"
+            locators.append(q_locator)
             output_str = format_prediction(eg, pred, q_locator, flows=flows)
             with open(output_dir / f"{q_locator}_{pred.outcome}.txt", "w") as f:
                 f.write(output_str)
@@ -198,6 +200,7 @@ def run(config: DictConfig) -> None:
                         **split_results,
                         "labels": labels,
                         "predictions": preds,
+                        "locators": locators,
                     }
                 )
             )
