@@ -30,7 +30,7 @@ QA_FORMATTERS = {
     "medmcqa": MedMCQAFormatter,
 }
 
-REQUIRED_COLUMNS = ["question", "options", "answer_idx", "reasoning"]
+REQUIRED_COLUMNS = ["question", "options", "answer_idx", "reasoning", "uid"]
 
 
 class DatasetBuilder(object):
@@ -86,6 +86,11 @@ class DatasetBuilder(object):
         for split, dset in dataset.items():
             if not self._validate_data(dset):
                 raise ValueError(f"Invalid dataset for split: {split}")
+
+        # check unicity of the uid
+        uids = [uid for split, dset in dataset.items() for uid in dset["uid"]]
+        if len(uids) != len(set(uids)):
+            raise ValueError(f"Duplicate uid found in dataset: {self.name}")
 
         # filter the splits
         if self.splits is not None:

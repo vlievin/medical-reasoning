@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import socket
-import time
 import warnings
 from pathlib import Path
 from typing import Any
@@ -22,10 +21,10 @@ from hydra.utils import instantiate
 from loguru import logger
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
-from omegaconf import open_dict
 from rich.table import Table
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import f1_score
+from slugify import slugify
 from tqdm import tqdm
 
 from medical_reasoning.datasets import DatasetBuilder
@@ -39,14 +38,19 @@ from medical_reasoning.utils.datastruct import Prediction
 SEPARATOR = "-" * 80 + "\n"
 
 OmegaConf.register_new_resolver("if", lambda x, y, z: y if x else z)
+OmegaConf.register_new_resolver("len", len)
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
 OmegaConf.register_new_resolver("hostname", socket.gethostname)
+OmegaConf.register_new_resolver("shorten", lambda x, y: str(slugify(x))[: int(y)])
 
 warnings.filterwarnings(
     action="ignore",
     category=ElasticsearchWarning,
 )
+
+
+hydra
 
 
 class FilterByLength(object):
@@ -117,14 +121,12 @@ def run(config: DictConfig) -> None:
     shots_dataset = make_shots_dataset(config)
 
     # setup the index
-    if config.use_documents:
+    if config.n_docs > 0:
         index: Optional[ElasticsearchIndex] = instantiate(config.index)
     else:
         index = None
 
     # setting up OpenAI API
-    with open_dict(config):
-        config.model.template.options = allowed_options
     model: Reasoner = instantiate(config.model)
 
     output_dir = Path(os.getcwd()) / "output"
@@ -138,13 +140,13 @@ def run(config: DictConfig) -> None:
         dset = dataset[split]
         labels = []
         preds = []
+        locators = []
         indices = list(range(len(dset)))
         rgn = np.random.RandomState(0)
         rgn.shuffle(indices)
         for i, row_idx in (
             pbar := tqdm(enumerate(indices), unit="question", total=len(indices))
         ) :
-
             # get the row of data, validate and potentially sample documents
             eg = make_eg(dset[row_idx], allowed_options, index=index, config=config)
 
@@ -154,8 +156,7 @@ def run(config: DictConfig) -> None:
             )
 
             # process the Example with the model
-            prediction_str, meta = model(eg, shots=shots)
-            pred = Prediction(prediction_str=prediction_str, example=eg, meta=meta)
+            pred, flows = model(eg, shots=shots)
 
             # update the trackers
             labels.append(eg.answer_idx)
@@ -170,8 +171,9 @@ def run(config: DictConfig) -> None:
             )
 
             # write the result to file
-            q_locator = f"{builder.name}_{split}_{row_idx}"
-            output_str = format_prediction(eg, pred, q_locator)
+            q_locator = f"{builder.name}_{eg.uid}"
+            locators.append(q_locator)
+            output_str = format_prediction(eg, pred, q_locator, flows=flows)
             with open(output_dir / f"{q_locator}_{pred.outcome}.txt", "w") as f:
                 f.write(output_str)
 
@@ -183,11 +185,11 @@ def run(config: DictConfig) -> None:
             "accuracy": accuracy_score(labels, preds),
             "f1": f1_score(labels, preds, average="macro"),
             "engine": model.engine,
-            "prompt_mode": model.prompt_mode,
-            "identity": str(model.template.identity),
+            "strategy": model.strategy,
             "shots": int(config.shots),
-            "grounded": str(config.use_documents),
+            "n_docs": int(config.n_docs),
             "cost": float(model.total_cost),
+            "calls": int(model.n_calls),
         }
 
         # write data
@@ -198,6 +200,7 @@ def run(config: DictConfig) -> None:
                         **split_results,
                         "labels": labels,
                         "predictions": preds,
+                        "locators": locators,
                     }
                 )
             )
@@ -209,7 +212,7 @@ def run(config: DictConfig) -> None:
         # print results
         with open(result_file.as_posix(), "r") as f:
             all_results = [json.loads(line) for line in f.readlines()]
-        table = format_results(all_results)
+        table = format_results_as_table(all_results)
         rich.print(table)
         rich.print(f">> Logged to {output_dir}")
 
@@ -299,7 +302,7 @@ def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConf
         base_query = eg.question
 
     queries = [f"{o} {base_query}" for o in eg.options]
-    results = index(queries, eg.options, k=config.topk)
+    results = index(queries, eg.options, k=config.n_docs)
     documents = []
     if len(results["text"]) != len(results["title"]):
         raise ValueError("text and title must be of the same length")
@@ -313,23 +316,29 @@ def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConf
     return eg.copy(update={"documents": documents})
 
 
-def format_prediction(eg: Example, pred: Prediction, q_locator: str) -> str:
+def format_prediction(
+    eg: Example, pred: Prediction, q_locator: str, flows: List[str]
+) -> str:
     """Format the prediction for a given example."""
     formatted_options = "\n".join(
         [f"   {eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)]
     )
+    formatted_flows = ""
+    for i, flow in enumerate(flows):
+        _sep = "." * len(SEPARATOR)
+        formatted_flows += f"[Flow {i + 1}]\n{_sep}\n{flow}\n"
     output_str = (
         f"Outcome: {pred.outcome}\n{SEPARATOR}\n"
         f"Answer: {eg.answer_symbol}: {eg.options[eg.answer_idx]}\n"
         f"Prediction: {pred.label}: {pred.full}\n{SEPARATOR}\n"
         f"Question [{q_locator}]:\n{eg.question}\n\n"
         f"Options:\n{formatted_options}\n{SEPARATOR}\n"
-        f"Reasoning: \n\n{pred.meta['completed_prompt']}\n"
+        f"Reasonings: \n\n{formatted_flows}\n"
     )
     return output_str
 
 
-def format_results(all_results) -> Table:
+def format_results_as_table(all_results) -> Table:
     """Format the results of the experiment using `rich.table.Table`."""
     COLUMN_FORMATS = {
         "dataset": "<20",
@@ -338,15 +347,15 @@ def format_results(all_results) -> Table:
         "accuracy": ".2%",
         "f1": ".2%",
         "engine": "<20",
-        "prompt_mode": "<20",
-        "identity": "<20",
-        "grounded": "<16",
+        "strategy": "<32",
+        "n_docs": "",
         "shots": "",
         "cost": ".2f",
+        "calls": "",
     }
 
     first_row = all_results[0]
-    keys = list(first_row.keys())
+    keys = [c for c in COLUMN_FORMATS.keys() if c in first_row.keys()]
     table = Table(title="Results")
     for key in keys:
         table.add_column(key, justify="center")

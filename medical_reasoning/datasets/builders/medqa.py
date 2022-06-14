@@ -90,6 +90,7 @@ class MedQA(datasets.GeneratorBasedBuilder):
             features=datasets.Features(
                 {
                     "idx": datasets.Value("int32"),
+                    "uid": datasets.Value("string"),
                     "question": datasets.Value("string"),
                     "question_clean": datasets.Value("string"),
                     "answer_idx": datasets.Value("int32"),
@@ -139,6 +140,7 @@ class MedQA(datasets.GeneratorBasedBuilder):
                 assert len(options) == 4
                 yield i, {
                     "idx": i,
+                    "uid": f"{split}-{i}",
                     "question": question,
                     "question_clean": metamap,
                     "answer_idx": target,

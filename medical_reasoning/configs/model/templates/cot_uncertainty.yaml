@@ -1,0 +1,4 @@
+defaults:
+  - /model/template/reasoning@reasoning
+  - /model/template/extraction@extraction
+  - /model/template/uncertainty@uncertainty

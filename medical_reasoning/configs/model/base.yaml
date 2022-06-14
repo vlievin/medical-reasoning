@@ -1,10 +1,12 @@
 defaults:
-  - template: multiple_choice
+  - templates: cot
+  - config: default
+  - verifier: majority
 
 _target_: medical_reasoning.models.Reasoner
 engine: ???
-prompt_mode: ${prompt_mode}
 price: ??? # price per 1k tokens
 tokenizer: ${tokenizer}
-max_tokens: 256
 max_rate: 60 # rate per minute
+cache_dir: ${sys.cache_dir} / cached_funcs
+reset_cache: false

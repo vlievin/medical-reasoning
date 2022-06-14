@@ -1,8 +1,8 @@
+from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 
-import rich
 from loguru import logger
 from pydantic import BaseModel
 from pydantic import root_validator
@@ -13,6 +13,7 @@ class Example(BaseModel):
     """A simple data structure for a single example."""
 
     question: str
+    uid: str
     options: List[str]
     documents: List[str] = None
     reasoning: Optional[str] = None
@@ -37,8 +38,10 @@ class Example(BaseModel):
     @root_validator()
     def ensure_answer_idx_range(cls, values: Dict[str, Optional[str]]):
         """Check if answer_idx is in range of options."""
-        answer_idx = values.get("answer_idx")
+        answer_idx = int(values.get("answer_idx"))
         allowed_options = values.get("allowed_options")
+        if not isinstance(allowed_options, list):
+            raise ValueError("allowed_options must be a list")
         if (answer_idx < 0 and answer_idx != -1) or answer_idx >= len(allowed_options):
             raise ValueError(
                 f"Invalid answer_idx range: {answer_idx} not int [0, {len(allowed_options) - 1}]."
@@ -64,7 +67,7 @@ class Prediction(BaseModel):
 
     prediction_str: Optional[str]
     example: Example
-    meta: Optional[Dict[str, str]]
+    meta: Optional[Dict[str, Any]]
     prediction_idx: int = -1
     label: str = "N/A"
 

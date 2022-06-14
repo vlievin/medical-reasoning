@@ -43,6 +43,10 @@ def infer_answer_from_choices(
     options: Optional[List] = None,
     pre_answer: Optional[str] = None,
 ) -> None | str:
+
+    if len(prompt_answer) == 1:
+        return prompt_answer
+
     # make the regex patterns for the option symbols
     option_symbols_re = [rf"{o}(\)|:|\.|,| )" for o in option_symbols]
 

@@ -2,11 +2,9 @@ import abc
 import re
 from typing import Dict
 
-import rich
 from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
-from loguru import logger
 
 from medical_reasoning.datasets.utils.split_pubmed import split_pubmed
 
@@ -49,6 +47,15 @@ class FlattenPubmedqaContext(object):
         return {"documents": documents}
 
 
+class AddIdx(object):
+    def __init__(self, column, value):
+        self.column = column
+        self.value = value
+
+    def __call__(self, row: Dict, idx) -> Dict:
+        return {self.column: f"{idx}-{self.value}"}
+
+
 class ConvertHeadQA(object):
     def __call__(self, row: Dict) -> Dict:
         r_index = row["ra"] - 1
@@ -80,12 +87,15 @@ class CleanuMedMCQAReasoning(object):
 
 class Formatter(object):
     @abc.abstractmethod
-    def format(self, dataset: Dataset) -> Dataset:
+    def format(self, dataset: Dataset, split: Split, **kwargs) -> Dataset:
         raise NotImplementedError()
 
     def __call__(self, dataset: DatasetDict, **kwargs) -> DatasetDict:
         return DatasetDict(
-            {split: self.format(dset) for split, dset in dataset.items()}
+            {
+                split: self.format(dset, split=split, **kwargs)
+                for split, dset in dataset.items()
+            }
         )
 
 
@@ -101,6 +111,7 @@ class MedMCQAFormatter(Formatter):
             {
                 "cop": "answer_idx",
                 "exp": "reasoning",
+                "id": "uid",
             }
         )
         dataset = dataset.remove_columns(["opa", "opb", "opc", "opd"])
@@ -125,11 +136,12 @@ class PubMedQAFormatter(Formatter):
         assert set(dataset.keys()) == {Split.TRAIN}
         dataset = dataset[Split.TRAIN]
 
-        train, test = split_pubmed(dataset, 2)
+        train_dev, test = split_pubmed(dataset, 2)
+        train, valid = split_pubmed(train_dev, 2)
         return DatasetDict(
             {
                 Split.TRAIN: train,
-                Split.VALIDATION: test,
+                Split.VALIDATION: valid,
                 Split.TEST: test,
             }
         )
@@ -150,13 +162,14 @@ class PubMedQAFormatter(Formatter):
         dataset = dataset.rename_columns(
             {
                 "long_answer": "reasoning",
+                "pubid": "uid",
             }
         )
         return dataset
 
 
 class HeadQAFormatter(Formatter):
-    def format(self, dataset: Dataset, **kwargs) -> Dataset:
+    def format(self, dataset: Dataset, split: Split, **kwargs) -> Dataset:
         dataset = dataset.map(
             ConvertHeadQA(),
             desc="Formatting answers",
@@ -168,7 +181,11 @@ class HeadQAFormatter(Formatter):
                 "qtext": "question",
                 "ra": "answer_idx",
                 "answers": "options",
+                "qid": "uid",
             }
+        )
+        dataset = dataset.map(
+            AddIdx("uid", str(split)), desc="Concat uid", with_indices=True, num_proc=4
         )
         dataset = dataset.remove_columns(["image"])
         dataset = dataset.add_column("reasoning", [""] * len(dataset))

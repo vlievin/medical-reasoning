@@ -1,3 +1,5 @@
+defaults:
+  - base
+
 _target_: medical_reasoning.models.templates.MultipleChoiceTemplate
-identity: ${identity}
-use_documents: ${use_documents}
+use_documents: ${n_docs}
