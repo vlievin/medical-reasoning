@@ -7,6 +7,7 @@ from typing import Callable
 
 import click
 import dill
+import loguru
 from datasets.fingerprint import Hasher
 
 
@@ -26,6 +27,12 @@ class CachedFunction(object):
     def __init__(self, cache_dir: os.PathLike, reset_cache: bool = False):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True, parents=True)
+
+        if self.cache_dir.exists():
+            n_files = len(list(self.cache_dir.iterdir()))
+            loguru.logger.info(
+                f"Using cache at {self.cache_dir}, found {n_files} cached files"
+            )
 
         if reset_cache:
             if self.cache_dir.exists():
