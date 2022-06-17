@@ -10,6 +10,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
+import loguru
 import numpy as np
 import openai
 import yaml
@@ -259,10 +260,17 @@ class Reasoner(object):
         return completions
 
     def _cleanup_completions(self, completions):
-        completions = [
-            completion.split("<|endoftext|>")[0] for completion in completions
-        ]
-        return completions
+        END_TOKEN = "<|endoftext|>"
+        cleaned_completions = []
+        for completion in completions:
+            parts = completion.split(END_TOKEN)
+            if len(parts) > 1:
+                loguru.Logger.warning(
+                    f"Found generated text after end token: "
+                    f"{END_TOKEN}: {END_TOKEN.join(parts[1:])}"
+                )
+            cleaned_completions.append(parts[0])
+        return cleaned_completions
 
     def _simulate_completion(self, n_tokens):
         rgn = np.random.RandomState(0)

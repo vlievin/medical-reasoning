@@ -327,14 +327,15 @@ def format_prediction(
     formatted_flows = ""
     for i, flow in enumerate(flows):
         _sep = "." * len(SEPARATOR)
-        formatted_flows += f"[Flow {i + 1}]\n{_sep}\n{flow}\n"
+        formatted_flows += f"\n[Flow {i + 1}]\n{_sep}\n{flow}\n"
     output_str = (
         f"Outcome: {pred.outcome}\n{SEPARATOR}\n"
         f"Answer: {eg.answer_symbol}: {eg.options[eg.answer_idx]}\n"
-        f"Prediction: {pred.label}: {pred.full}\n{SEPARATOR}\n"
+        f"Prediction: {pred.label}: {pred.full}\n"
+        f"Probs: {pred.probs}\n{SEPARATOR}\n"
         f"Question [{q_locator}]:\n{eg.question}\n\n"
         f"Options:\n{formatted_options}\n{SEPARATOR}\n"
-        f"Reasonings: \n\n{formatted_flows}\n"
+        f"Reasonings:\n{formatted_flows}\n"
     )
     return output_str
 

@@ -3,7 +3,7 @@
 defaults:
   - _self_
   - dataset: medqa_us
-  - strategy: strat_7
+  - strategy: strat_22
   - tokenizer: gpt2
   - index: elasticsearch
   - model: ada
@@ -19,6 +19,8 @@ exp_id: ${dataset.name}-${model.engine}-${len:${model.templates}}steps-${n_docs}
 prompt_style: short
 n_docs: 0
 shots: 0
+n_samples: 1
+temperature: 0
 
 # technicals
 print_config: true
