@@ -70,6 +70,7 @@ class Prediction(BaseModel):
     meta: Optional[Dict[str, Any]]
     prediction_idx: int = -1
     label: str = "N/A"
+    probs: Optional[List[float]] = None
 
     @property
     def idx(self):

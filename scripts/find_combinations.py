@@ -68,13 +68,11 @@ formatters = {
 
 class ComputeMetrics(object):
     def __init__(
-        self, records: pd.DataFrame, n_options=4, eps: float = -1, noise_scale=1e-5
+            self, records: pd.DataFrame, n_options=4, eps: float = 1e-1, noise_scale=1e-5
     ):
         self.records = records
         self.n_options = n_options
         self.noise_scale = noise_scale
-        if eps < 0:
-            eps = 1 / (n_options + 1)
         assert eps < 1 and eps > 0
         self.eps = eps
 
@@ -257,6 +255,9 @@ if __name__ == "__main__":
         "--metric", help="metric to maximize", default="accuracy+accuracy@2"
     )
     parser.add_argument(
+        "--perm_type", help="type of permutations", default="combinatorial"
+    )
+    parser.add_argument(
         "--topn", help="number of top combinations to display", default=20, type=int
     )
     parser.add_argument("--num_proc", help="number of workers", default=4, type=int)
@@ -362,19 +363,34 @@ if __name__ == "__main__":
                 f"Supported metrics: {compute_metrics.metrics_names}"
             )
         queue = []
-        for budget in range(args.min_perm, args.max_perm + 1):
+
+        # set arguments
+        if args.max_perm > 0:
+            perm_range = range(args.min_perm, args.max_perm + 1)
+        else:
+            perm_range = [len(summary["strategy"].values)]
+        perm_fn = {
+            "combinatorial": itertools.combinations,
+            "permutation": itertools.permutations,
+            "topn": lambda x, y: [x[:y]],
+        }[args.perm_type]
+
+        for budget in perm_range:
             total = sum(
-                1 for _ in itertools.combinations(summary["strategy"].values, budget)
+                1 for _ in perm_fn(summary["strategy"].values, budget)
             )
             try:
                 permutations = enumerate(
-                    itertools.combinations(summary["strategy"].values, budget)
+                    perm_fn(summary["strategy"].values, budget)
                 )
-                outputs = pool.imap_unordered(
-                    compute_metrics, permutations, chunksize=100
-                )
+                if args.num_proc > 1:
+                    outputs = pool.imap_unordered(
+                        compute_metrics, permutations, chunksize=100
+                    )
+                else:
+                    outputs = map(compute_metrics, permutations)
 
-                for output in (pbar := tqdm(outputs, total=total)) :
+                for output in (pbar := tqdm(outputs, total=total)):
                     queue += [output]
 
                     # store the queue
@@ -415,7 +431,7 @@ if __name__ == "__main__":
     expert_data.index += 1
     with pd.option_context("max_colwidth", 1000):
         expert_data.to_latex(
-            buf=multirun_path / f"experts-permutations-{args.metric}.tex",
+            buf=multirun_path / f"experts-permutations-{args.max_perm}-{args.metric}.tex",
             columns=["n_experts", *compute_metrics.metrics_names, "strategies"],
             formatters=formatters,
         )

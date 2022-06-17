@@ -84,6 +84,7 @@ class FilterByLength(object):
     version_base="1.2",
 )
 def run(config: DictConfig) -> None:
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     hydra_config = HydraConfig().get()
     if config.disable_caching:
         datasets.disable_caching()
