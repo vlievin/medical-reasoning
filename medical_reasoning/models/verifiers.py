@@ -34,7 +34,10 @@ class MajorityVotingVerifier(Verifier):
         # compute the probabilities
         probs = np.zeros((len(eg.allowed_options),))
         for a in answer_candidates:
-            i = eg.allowed_options.index(a)
+            if a is None:
+                i = np.random.randint(0, len(eg.allowed_options))
+            else:
+                i = eg.allowed_options.index(a)
             probs[i] += 1
 
         probs /= len(answer_candidates)

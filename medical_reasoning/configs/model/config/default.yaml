@@ -1,5 +1,5 @@
 temperature: ${temperature}
-max_tokens: 1024
+max_tokens: ${max_tokens}
 n: ${n_samples}
 frequency_penalty: 0.0
 presence_penalty: 0.0

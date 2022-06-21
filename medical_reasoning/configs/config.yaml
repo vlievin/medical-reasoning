@@ -21,6 +21,7 @@ n_docs: 0
 shots: 0
 n_samples: 1
 temperature: 0
+max_tokens: 1024
 
 # technicals
 print_config: true
