@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import abc
 import re
+from collections import OrderedDict
 from copy import copy
 from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
 from typing import T
+
+import rich
 
 from medical_reasoning.models.functional.infer_answer import infer_answer_from_choices
 from medical_reasoning.utils.datastruct import Example
@@ -139,12 +142,13 @@ class MultipleChoiceTemplate(PromptTemplate):
         **kwargs,
     ) -> None | str:
 
-        return infer_answer_from_choices(
+        pred = infer_answer_from_choices(
             prompt_answer,
             options=eg.options,
             option_symbols=eg.allowed_options,
             pre_answer=pre_answer,
         )
+        return pred
 
     def simulate_completion(self, eg: Example) -> str:
         return f" {eg.answer_symbol}) {eg.answer}."
@@ -155,7 +159,7 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
 
     def __init__(self, strategy: str = "Let's think step by step", **kwargs):
         super(ReasoningMultipleChoiceTemplate, self).__init__(**kwargs)
-        if strategy in ("none", "null"):
+        if strategy in ("none", "null", "--"):
             strategy = None
         if strategy is not None:
             strategy = strategy.replace("_", " ").strip()
@@ -291,3 +295,20 @@ class UncertaintyTemplate(PromptTemplate):
     @property
     def description(self) -> str:
         return "uncertainty"
+
+
+def auto_templates(**templates) -> OrderedDict:
+    """Handle special cases when building chains of templates"""
+    templates = [(name, templates) for name, templates in templates.items()]
+    first_template = templates[0][1]
+    if (
+        isinstance(first_template, ReasoningMultipleChoiceTemplate)
+        and first_template.strategy is None
+    ):
+        assert isinstance(templates[1][1], ExtractionMultipleChoiceTemplate)
+        direct_template = MultipleChoiceTemplate(
+            use_documents=first_template.use_documents
+        )
+        templates = [("direct", direct_template)] + templates[2:]
+
+    return OrderedDict(templates)

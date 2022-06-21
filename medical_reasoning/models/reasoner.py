@@ -257,6 +257,7 @@ class Reasoner(object):
             self.total_cost += max_price * len(completions)
 
         completions = self._cleanup_completions(completions)
+
         return completions
 
     def _cleanup_completions(self, completions):

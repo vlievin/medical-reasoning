@@ -84,6 +84,6 @@ def infer_answer_from_choices(
 
     logger.warning(f"Failed to match any answer ({prompt_answer})")
     if "<GPT-3-answer>" not in prompt_answer:
-        rich.print(f">> prompt_answer: {prompt_answer}")
-        rich.print(f">> pre_answer: {pre_answer}")
-        rich.print(f">> options: {options}")
+        logger.debug(f"prompt_answer: {prompt_answer}")
+        logger.debug(f"pre_answer: {pre_answer}")
+        logger.debug(f"options: {options}")

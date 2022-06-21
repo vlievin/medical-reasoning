@@ -44,8 +44,9 @@ class MajorityVotingVerifier(Verifier):
 
         # return
         pred_str = freqs.most_common(1)[0][0]
-        return Prediction(prediction_str=pred_str,
-                          example=eg,
-                          meta=meta,
-                          probs=probs.tolist(),
-                          )
+        return Prediction(
+            prediction_str=pred_str,
+            example=eg,
+            meta=meta,
+            probs=probs.tolist(),
+        )
