@@ -111,6 +111,7 @@ def run(config: DictConfig) -> None:
     # initialize the dataset
     builder: DatasetBuilder = instantiate(config.dataset)
     dataset = builder()
+    splits = list(dataset.keys())
     allowed_options = builder.options
     logger.info(f"Allowed options: {', '.join(allowed_options)}")
     rich.print(f"Dataset:\n{dataset}")
@@ -122,7 +123,8 @@ def run(config: DictConfig) -> None:
     shots_dataset = make_shots_dataset(config)
 
     # setup the index
-    if config.n_docs > 0:
+    if config.n_docs > 0 and "documents" not in dataset[splits[0]].column_names:
+        rich.print(f"> instantiate {config.index}")
         index: Optional[ElasticsearchIndex] = instantiate(config.index)
     else:
         index = None
@@ -134,7 +136,7 @@ def run(config: DictConfig) -> None:
     output_dir.mkdir(exist_ok=True, parents=True)
 
     logger.info(f"Logging to {output_dir}")
-    splits = list(dataset.keys())
+
     split_info = [f"{split} ({len(dataset[split])})" for split in splits]
     logger.info(f"Found splits: {', '.join(split_info)}")
     for split in splits:
