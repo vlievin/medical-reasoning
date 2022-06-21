@@ -3,7 +3,7 @@
 defaults:
   - _self_
   - dataset: medqa_us
-  - strategy: strat_22
+  - strategy: strat_4
   - tokenizer: gpt2
   - index: elasticsearch
   - model: ada

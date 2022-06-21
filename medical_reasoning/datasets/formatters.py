@@ -29,24 +29,6 @@ class NestColumns(object):
         return {self.output_column: output}
 
 
-class ConvertYesNoMaybe(object):
-    def __init__(self, input_column):
-        self.input_column = input_column
-
-    def __call__(self, row: Dict) -> Dict:
-        yesno_answer = row[self.input_column]
-        options = ["yes", "no", "maybe"]
-        answer = options.index(yesno_answer)
-        return {"options": options, "answer_idx": answer}
-
-
-class FlattenPubmedqaContext(object):
-    def __call__(self, row: Dict) -> Dict:
-        documents = row["context"]["contexts"]
-        documents = ["\n".join(documents)]
-        return {"documents": documents}
-
-
 class AddIdx(object):
     def __init__(self, column, value):
         self.column = column
@@ -120,50 +102,6 @@ class MedMCQAFormatter(Formatter):
             CleanuMedMCQAReasoning(),
             desc="Cleaning up reasoning",
             num_proc=4,
-        )
-        return dataset
-
-
-class PubMedQAFormatter(Formatter):
-    def __call__(self, dataset: DatasetDict, **kwargs) -> DatasetDict:
-        dataset = self.exctract_splits(dataset)
-        return DatasetDict(
-            {split: self.format(dset) for split, dset in dataset.items()}
-        )
-
-    @staticmethod
-    def exctract_splits(dataset: DatasetDict) -> DatasetDict:
-        assert set(dataset.keys()) == {Split.TRAIN}
-        dataset = dataset[Split.TRAIN]
-
-        train_dev, test = split_pubmed(dataset, 2)
-        train, valid = split_pubmed(train_dev, 2)
-        return DatasetDict(
-            {
-                Split.TRAIN: train,
-                Split.VALIDATION: valid,
-                Split.TEST: test,
-            }
-        )
-
-    def format(self, dataset: Dataset, **kwargs) -> Dataset:
-        # convert the yes/no answer
-        dataset = dataset.map(
-            ConvertYesNoMaybe("final_decision"),
-            desc="Converting yes/no answers",
-            num_proc=4,
-        )
-
-        dataset = dataset.map(
-            FlattenPubmedqaContext(),
-            desc="Flatten contexts",
-            num_proc=4,
-        )
-        dataset = dataset.rename_columns(
-            {
-                "long_answer": "reasoning",
-                "pubid": "uid",
-            }
         )
         return dataset
 

@@ -12,20 +12,19 @@ from datasets import Dataset
 from datasets import DatasetDict
 
 from medical_reasoning.datasets.builders import medqa
+from medical_reasoning.datasets.builders import pubmedqa
 from medical_reasoning.datasets.formatters import HeadQAFormatter
 from medical_reasoning.datasets.formatters import MedMCQAFormatter
-from medical_reasoning.datasets.formatters import PubMedQAFormatter
 
 QA_DATASETS = {
     "medqa_us": (medqa.__file__, "us"),
     "medqa_tw.yaml": (medqa.__file__, "tw"),
-    "pubmedqa": ("pubmed_qa", "pqa_labeled"),
+    "pubmedqa": (pubmedqa.__file__, "pqa-l"),
     "headqa": ("head_qa", "en"),
     "medmcqa": ("medmcqa", None),
 }
 
 QA_FORMATTERS = {
-    "pubmedqa": PubMedQAFormatter,
     "headqa": HeadQAFormatter,
     "medmcqa": MedMCQAFormatter,
 }

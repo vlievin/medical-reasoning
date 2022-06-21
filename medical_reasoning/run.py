@@ -335,7 +335,7 @@ def format_prediction(
         f"Probs: {pred.probs}\n{SEPARATOR}\n"
         f"Question [{q_locator}]:\n{eg.question}\n\n"
         f"Options:\n{formatted_options}\n{SEPARATOR}\n"
-        f"Reasonings:\n{formatted_flows}\n"
+        f"Reasoning:\n{formatted_flows}\n"
     )
     return output_str
 

@@ -68,7 +68,7 @@ formatters = {
 
 class ComputeMetrics(object):
     def __init__(
-            self, records: pd.DataFrame, n_options=4, eps: float = 1e-1, noise_scale=1e-5
+        self, records: pd.DataFrame, n_options=4, eps: float = 1e-1, noise_scale=1e-5
     ):
         self.records = records
         self.n_options = n_options
@@ -376,13 +376,9 @@ if __name__ == "__main__":
         }[args.perm_type]
 
         for budget in perm_range:
-            total = sum(
-                1 for _ in perm_fn(summary["strategy"].values, budget)
-            )
+            total = sum(1 for _ in perm_fn(summary["strategy"].values, budget))
             try:
-                permutations = enumerate(
-                    perm_fn(summary["strategy"].values, budget)
-                )
+                permutations = enumerate(perm_fn(summary["strategy"].values, budget))
                 if args.num_proc > 1:
                     outputs = pool.imap_unordered(
                         compute_metrics, permutations, chunksize=100
@@ -390,7 +386,7 @@ if __name__ == "__main__":
                 else:
                     outputs = map(compute_metrics, permutations)
 
-                for output in (pbar := tqdm(outputs, total=total)):
+                for output in (pbar := tqdm(outputs, total=total)) :
                     queue += [output]
 
                     # store the queue
@@ -431,7 +427,8 @@ if __name__ == "__main__":
     expert_data.index += 1
     with pd.option_context("max_colwidth", 1000):
         expert_data.to_latex(
-            buf=multirun_path / f"experts-permutations-{args.max_perm}-{args.metric}.tex",
+            buf=multirun_path
+            / f"experts-permutations-{args.max_perm}-{args.metric}.tex",
             columns=["n_experts", *compute_metrics.metrics_names, "strategies"],
             formatters=formatters,
         )
