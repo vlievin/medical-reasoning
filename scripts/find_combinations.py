@@ -254,9 +254,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--metric", help="metric to maximize", default="accuracy+accuracy@2"
     )
-    parser.add_argument(
-        "--perm_type", help="type of permutations", default="combinatorial"
-    )
+    parser.add_argument("--perm_type", help="type of permutations", default="topn")
     parser.add_argument(
         "--topn", help="number of top combinations to display", default=20, type=int
     )
@@ -267,7 +265,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max_perm",
         help="Maximum permutation budget",
-        default=4,
+        default=-1,
         type=int,
     )
     parser.add_argument(
@@ -368,7 +366,7 @@ if __name__ == "__main__":
         if args.max_perm > 0:
             perm_range = range(args.min_perm, args.max_perm + 1)
         else:
-            perm_range = [len(summary["strategy"].values)]
+            perm_range = list(range(args.min_perm, len(summary["strategy"].values) + 1))
         perm_fn = {
             "combinatorial": itertools.combinations,
             "permutation": itertools.permutations,

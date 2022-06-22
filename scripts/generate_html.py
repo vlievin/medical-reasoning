@@ -109,7 +109,7 @@ def load_data(data_dir: Path) -> (List[str], List[Dict[str, Any]]):
 
 def make_template(args):
     data_dir = Path(args.path)
-    output_path = "main.html"
+    output_path = "usmle.html"
     logger.info(f"Reading data from {data_dir}")
 
     # load the data
