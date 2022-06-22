@@ -3,7 +3,6 @@ import json
 from pathlib import Path
 
 import datasets
-import rich
 from datasets import Split
 
 _CITATION = """\
@@ -114,11 +113,17 @@ class PubMedQAConfig(datasets.GeneratorBasedBuilder):
         data = json.load(open(filepath))
         for i, (uid, row) in enumerate(data.items()):
             answer = row["final_decision"]
+            cts = row['CONTEXTS']
+            labels = row['LABELS']
+            assert len(cts) == len(labels)
+            doc_parts = []
+            for label, ctx in zip(labels, cts):
+                doc_parts.append(f"{label}: {ctx}")
             yield i, {
                 "idx": i,
                 "uid": f"{split}-{uid}",
                 "question": row["QUESTION"],
-                "documents": ["\n".join(row["CONTEXTS"])],
+                "documents": ["\n".join(doc_parts)],
                 "reasoning": row["LONG_ANSWER"],
                 "options": self.ALLOWED_OPTIONS,
                 "answer_idx": self.ALLOWED_OPTIONS.index(answer),

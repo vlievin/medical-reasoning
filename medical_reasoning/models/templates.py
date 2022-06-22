@@ -114,7 +114,7 @@ class MultipleChoiceTemplate(PromptTemplate):
             if eg.documents is None or len(eg.documents) == 0:
                 raise ValueError("documents must be provided if use_documents is True")
             formatted_documents = "\n".join(eg.documents)
-            prompt += f"Context: {formatted_documents}\n\n"
+            prompt += f"{formatted_documents}\n\n"
 
         formatted_options = [
             f"{eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)
@@ -307,7 +307,8 @@ def auto_templates(**templates) -> OrderedDict:
     ):
         assert isinstance(templates[1][1], ExtractionMultipleChoiceTemplate)
         direct_template = MultipleChoiceTemplate(
-            use_documents=first_template.use_documents
+            use_documents=first_template.use_documents,
+            style=first_template.style
         )
         templates = [("direct", direct_template)] + templates[2:]
 
