@@ -113,7 +113,15 @@ class MultipleChoiceTemplate(PromptTemplate):
         if self.use_documents:
             if eg.documents is None or len(eg.documents) == 0:
                 raise ValueError("documents must be provided if use_documents is True")
-            formatted_documents = "\n".join(eg.documents)
+            docs = eg.documents
+            if len(eg.documents) == len(eg.allowed_options):
+                # trick to add letters to each documents
+                docs = [
+                    f"Document {o}. {doc}"
+                    for doc, o in zip(eg.documents, eg.allowed_options)
+                ]
+
+            formatted_documents = "\n".join(docs)
             prompt += f"Context: {formatted_documents}\n\n"
 
         formatted_options = [

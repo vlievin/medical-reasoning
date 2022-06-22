@@ -175,6 +175,7 @@ def run(config: DictConfig) -> None:
             locators.append(q_locator)
             output_str = format_prediction(eg, pred, q_locator, flows=flows)
             fname = f"{q_locator}_{pred.outcome}_{eg.answer_symbol}_{pred.label}.txt"
+            fname = fname.replace("/", "")
             with open(output_dir / fname, "w") as f:
                 f.write(output_str)
 
@@ -312,7 +313,7 @@ def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConf
         if len(x) != len(y):
             raise ValueError("text and title must be of the same number of results")
         for xx, yy in zip(x, y):
-            documents.append(f"Title: {yy}. {xx}")
+            documents.append(f'{yy}. "{xx}"')
 
     return eg.copy(update={"documents": documents})
 
