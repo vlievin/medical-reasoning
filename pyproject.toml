@@ -31,6 +31,7 @@ parameterized = "^0.8.1"
 jupyter = "^1.0.0"
 seaborn = "^0.11.2"
 matplotlib = "^3.5.2"
+Jinja2 = "^3.1.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -48,5 +49,6 @@ debug_exps = "experiment -m model=ada dataset=medqa_us,medmcqa dataset.subset=3 
 subset_exps = "experiment -m model=davinci dataset=medmcqa,headqa,medqa_us dataset.subset=30 dataset.splits=test"
 strategies = "experiment -m dataset=medqa_us dataset.splits=validation dataset.subset=100 'strategy=glob(strat_*)' max_tokens=256"
 styles = "experiment -m dataset=medqa_us dataset.splits=validation dataset.subset=100 strategy=strat_4,strat_7 prompt_style=none,short,full"
-full_exps = "experiment -m model=davinci model.prompt_mode=zero_shot,chain_of_thought model.template.identity=medical_expert use_documents=false,true dataset=pubmedqa,medqa_us,medmcqa"
+medqa_test = "experiment -m dataset=medqa_us dataset.splits=test model=davinci 'strategy=glob(strat__*)' prompt_style=short"
+pubmedqa_test = "experiment -m dataset=pubmedqa dataset.splits=test model=davinci 'strategy=glob(strat__*)' prompt_style=full n_docs=1"
 find_combinations = "python -m scripts.find_combinations"

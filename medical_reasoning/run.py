@@ -50,9 +50,6 @@ warnings.filterwarnings(
 )
 
 
-hydra
-
-
 class FilterByLength(object):
     def __init__(
         self,
@@ -177,7 +174,8 @@ def run(config: DictConfig) -> None:
             q_locator = f"{builder.name}_{eg.uid}"
             locators.append(q_locator)
             output_str = format_prediction(eg, pred, q_locator, flows=flows)
-            with open(output_dir / f"{q_locator}_{pred.outcome}.txt", "w") as f:
+            fname = f"{q_locator}_{pred.outcome}_{eg.answer_symbol}_{pred.label}.txt"
+            with open(output_dir / fname, "w") as f:
                 f.write(output_str)
 
         # register the results for the whole split

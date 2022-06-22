@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: Courier New, Courier, Lucida Sans Typewriter, Lucida Typewriter, monospace;
+        }
+
+        #myInput {
+            background-image: url('/css/searchicon.png');
+            background-position: 10px 10px;
+            background-repeat: no-repeat;
+            width: 100%;
+            font-size: 16px;
+            padding: 12px 20px 12px 40px;
+            border: 1px solid #ddd;
+            margin-bottom: 12px;
+        }
+
+        #myTable {
+            border-collapse: collapse;
+            table-layout: fixed;
+            width: 100%;
+            border: 1px solid #ddd;
+        }
+
+        #myTable th {
+            text-align: center;
+            padding: 18px;
+        }
+
+        #myTable td {
+            text-align: left;
+            padding: 12px;
+        }
+
+        #myTable tr {
+            border-bottom: 1px solid #ddd;
+        }
+
+        #myTable td {
+            vertical-align: top;
+            white-space: pre-wrap
+        }
+
+        #myTable tr.header, #myTable tr:hover {
+            background-color: #f1f1f1;
+        }
+    </style>
+</head>
+<body>
+
+<h1>{{ title }}</h1>
+
+<input type="text" id="myInput" onkeyup="filterRows()" placeholder="Filter the questions.."
+       title="Search the questions..">
+
+
+<table id="myTable">
+    <tr class="header">
+        {% for strategy in strategies %}
+        <th>{{ strategy }}</th>
+        {% endfor %}
+    </tr>
+    {% for row in data %}
+    <tr data-qid={{ row.question.qid }}>
+        <td colspan="{{ ncols }}"><strong>{{ row.question.dataset }} [{{row.question.split}}:{{row.question.idx}}]</strong> {{ row.question.content }}</td>
+    </tr>
+    <tr data-qid={{ row.question.qid }}>
+        {% for answer in row.answers %}
+        <td>{{ answer }}</td>
+        {% endfor %}
+    </tr>
+    {% endfor %}
+</table>
+
+<script>
+    function filterRows() {
+        var input, filter, table, tr, td, tds, i, j, qid_i, txtValue;
+        let visible = [];
+        input = document.getElementById("myInput");
+        filter = input.value.toUpperCase();
+        table = document.getElementById("myTable");
+        tr = table.getElementsByTagName("tr");
+
+        for (i = 0; i < tr.length; i++) {
+            tds = tr[i].getElementsByTagName("td");
+            for (j = 0; j < tds.length; j++) {
+                td = tds[j];
+                if (td) {
+                    txtValue = td.textContent || td.innerText;
+                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                        visible.push(tr[i].getAttribute("data-qid"));
+                    }
+                }
+            }
+        }
+
+        for (i = 0; i < tr.length; i++) {
+            qid_i = tr[i].getAttribute("data-qid");
+            if (visible.includes(qid_i)) {
+                tr[i].style.display = "";
+            } else {
+                tr[i].style.display = "none";
+            }
+        }
+    }
+</script>
+
+</body>
+</html>
