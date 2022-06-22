@@ -110,15 +110,20 @@ class PubMedQAConfig(datasets.GeneratorBasedBuilder):
 
     def _generate_examples(self, filepath, split):
         """Yields examples."""
+        USE_DOC_LABELS = True
         data = json.load(open(filepath))
         for i, (uid, row) in enumerate(data.items()):
             answer = row["final_decision"]
-            cts = row['CONTEXTS']
-            labels = row['LABELS']
+            cts = row["CONTEXTS"]
+            labels = row["LABELS"]
             assert len(cts) == len(labels)
             doc_parts = []
             for label, ctx in zip(labels, cts):
-                doc_parts.append(f"{label}: {ctx}")
+                if USE_DOC_LABELS:
+                    label = label[0].upper() + label[1:].lower()
+                    doc_parts.append(f"{label}. {ctx}")
+                else:
+                    doc_parts.append(ctx)
             yield i, {
                 "idx": i,
                 "uid": f"{split}-{uid}",
