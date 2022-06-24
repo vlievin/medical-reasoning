@@ -31,6 +31,7 @@ from tqdm import tqdm
 from medical_reasoning.datasets import DatasetBuilder
 from medical_reasoning.datasets.stats import DatasetStats
 from medical_reasoning.indexes import ElasticsearchIndex
+from medical_reasoning.indexes.base import Index
 from medical_reasoning.models import Reasoner
 from medical_reasoning.utils.config import print_config
 from medical_reasoning.utils.datastruct import Example
@@ -302,20 +303,15 @@ def make_shots_dataset(config, percentiles=None) -> Optional[Dataset]:
     return shots_dataset
 
 
-def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConfig):
+def sample_documents(eg: Example, *, index: Index, config: DictConfig):
     """Sample the documents for a given example."""
     if eg.question_clean is not None:
         base_query = eg.question_clean
     else:
         base_query = eg.question
 
-    queries = [f"{o} {base_query}" for o in eg.options]
-    results = index(queries, eg.options, k=config.n_docs)
-
-    rich.print(eg)
-    rich.print(results)
-    exit()
-
+    queries = [f"{base_query} {opt}" for opt in eg.options]
+    results = index(queries, k=config.n_docs)
     documents = []
     if len(results.texts) != len(results.titles):
         raise ValueError("text and title must be of the same length")
@@ -324,6 +320,7 @@ def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConf
         if len(x) != len(y):
             raise ValueError("text and title must be of the same number of results")
         for xx, yy in zip(x, y):
+            yy = yy.strip('"')
             documents.append(f'{yy}. "{xx}"')
 
     return eg.copy(update={"documents": documents})
