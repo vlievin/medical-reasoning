@@ -1,0 +1,5 @@
+defaults:
+  - corpus: wiki_dpr
+
+_target_: medical_reasoning.indexes.DprIndex
+subset: null

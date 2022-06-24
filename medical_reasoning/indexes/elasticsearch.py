@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from copy import copy
 from typing import Any
 from typing import Dict
@@ -12,12 +11,13 @@ import datasets
 import rich
 from datasets import DatasetDict
 from elasticsearch import Elasticsearch
-from hydra.utils import instantiate
 from loguru import logger
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
+from medical_reasoning.indexes.base import Index
+from medical_reasoning.indexes.base import SearchResults
 from medical_reasoning.indexes.utils.elasticsearch import es_create_index
 from medical_reasoning.indexes.utils.elasticsearch import es_ingest_bulk
 from medical_reasoning.indexes.utils.elasticsearch import es_remove_index
@@ -65,7 +65,7 @@ class GeneratePassages(object):
             yield passage
 
 
-class ElasticsearchIndex(object):
+class ElasticsearchIndex(Index):
     _instance = None
 
     def __init__(
@@ -80,12 +80,11 @@ class ElasticsearchIndex(object):
         passage_stride: int = 50,
         es_body: Optional[Dict[str, Any]] = None,
     ):
+        super(ElasticsearchIndex, self).__init__(corpus=corpus, subset=subset)
         self.title_boost_weight = title_boost_weight
         # process the dataset
-        if isinstance(corpus, DictConfig):
-            corpus: DatasetDict = instantiate(corpus)
         corpus = datasets.concatenate_datasets(list(corpus.values()))
-        if subset is not None:
+        if self.subset is not None:
             corpus = corpus.select(list(range(subset)))
             corpus._fingerprint = f"{corpus._fingerprint}-s{subset}"
         # generate passages
@@ -130,7 +129,7 @@ class ElasticsearchIndex(object):
         return self._instance
 
     def __call__(self, queries: List[str], query_titles: List[str], k: int = 10):
-        return es_search_bulk(
+        out = es_search_bulk(
             self.instance,
             index_name=self.index_name,
             queries=queries,
@@ -138,3 +137,5 @@ class ElasticsearchIndex(object):
             title_boost=self.title_boost_weight,
             k=k,
         )
+        rich.print(out)
+        return SearchResults(**out)

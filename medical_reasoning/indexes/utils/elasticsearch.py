@@ -85,9 +85,9 @@ def es_search_bulk(
         contents.append(temp_content)
 
     return {
-        "title": titles,
-        "score": scores,
-        "text": contents,
+        "titles": titles,
+        "scores": scores,
+        "texts": contents,
     }
 
 

@@ -3,6 +3,7 @@ import logging
 import os
 import socket
 import warnings
+from collections import Counter
 from pathlib import Path
 from typing import Any
 from typing import Dict
@@ -121,7 +122,6 @@ def run(config: DictConfig) -> None:
 
     # setup the index
     if config.n_docs > 0 and "documents" not in dataset[splits[0]].column_names:
-        rich.print(f"> instantiate {config.index}")
         index: Optional[ElasticsearchIndex] = instantiate(config.index)
     else:
         index = None
@@ -171,7 +171,10 @@ def run(config: DictConfig) -> None:
             )
 
             # write the result to file
-            q_locator = f"{builder.name}_{eg.uid}"
+            uid = eg.uid
+            if str(split) not in uid:
+                uid = f"{split}-{uid}"
+            q_locator = f"{builder.name}_{uid}"
             locators.append(q_locator)
             output_str = format_prediction(eg, pred, q_locator, flows=flows)
             fname = f"{q_locator}_{pred.outcome}_{eg.answer_symbol}_{pred.label}.txt"
@@ -195,6 +198,7 @@ def run(config: DictConfig) -> None:
         }
 
         # write data
+        preds_freq = Counter(preds).most_common()
         with open(data_file.as_posix(), "w") as f:
             f.write(
                 json.dumps(
@@ -203,6 +207,7 @@ def run(config: DictConfig) -> None:
                         "labels": labels,
                         "predictions": preds,
                         "locators": locators,
+                        "preds_freq": preds_freq,
                     }
                 )
             )
@@ -257,6 +262,7 @@ def make_eg(
     eg = Example(**row, allowed_options=allowed_options)
     if len(eg.documents) == 0 and index is not None:
         eg = sample_documents(eg, index=index, config=config)
+
     return eg
 
 
@@ -305,11 +311,16 @@ def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConf
 
     queries = [f"{o} {base_query}" for o in eg.options]
     results = index(queries, eg.options, k=config.n_docs)
+
+    rich.print(eg)
+    rich.print(results)
+    exit()
+
     documents = []
-    if len(results["text"]) != len(results["title"]):
+    if len(results.texts) != len(results.titles):
         raise ValueError("text and title must be of the same length")
 
-    for x, y in zip(results["text"], results["title"]):
+    for x, y in zip(results.texts, results.titles):
         if len(x) != len(y):
             raise ValueError("text and title must be of the same number of results")
         for xx, yy in zip(x, y):
@@ -319,7 +330,10 @@ def sample_documents(eg: Example, *, index: ElasticsearchIndex, config: DictConf
 
 
 def format_prediction(
-    eg: Example, pred: Prediction, q_locator: str, flows: List[str]
+    eg: Example,
+    pred: Prediction,
+    q_locator: str,
+    flows: List[str],
 ) -> str:
     """Format the prediction for a given example."""
     formatted_options = "\n".join(
@@ -330,12 +344,15 @@ def format_prediction(
         _sep = "." * len(SEPARATOR)
         formatted_flows += f"\n[Flow {i + 1}]\n{_sep}\n{flow}\n"
     output_str = (
-        f"Outcome: {pred.outcome}\n{SEPARATOR}\n"
+        f"Outcome: {pred.outcome}\n"
+        f"{SEPARATOR}\n"
         f"Answer: {eg.answer_symbol}: {eg.options[eg.answer_idx]}\n"
         f"Prediction: {pred.label}: {pred.full}\n"
-        f"Probs: {pred.probs}\n{SEPARATOR}\n"
+        f"Probs: {pred.probs}\n"
+        f"{SEPARATOR}\n"
         f"Question [{q_locator}]:\n{eg.question}\n\n"
-        f"Options:\n{formatted_options}\n{SEPARATOR}\n"
+        f"Options:\n{formatted_options}\n"
+        f"{SEPARATOR}\n"
         f"Reasoning:\n{formatted_flows}\n"
     )
     return output_str

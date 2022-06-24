@@ -5,7 +5,7 @@ defaults:
   - dataset: medqa_us
   - strategy: strat__4
   - tokenizer: gpt2
-  - index: elasticsearch
+  - index: dpr
   - model: ada
   - sys: local
   - hydra: default

@@ -1,6 +1,6 @@
 defaults:
   - es_body: default
-  - corpus: wiki
+  - corpus: wiki_dpr
 
 _target_: medical_reasoning.indexes.ElasticsearchIndex
 subset: null

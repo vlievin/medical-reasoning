@@ -26,7 +26,7 @@ ORDERING = [
     "Let's derive the differential diagnosis step by step",
 ]
 
-locator_re = re.compile(r"\[(\w+)_(\w+)-(\d+)\]")
+locator_re = re.compile(r"\[(\w+)_(\w+)-([\d\w+-]+)\]")
 
 formatted_dset = {"medqa_us": "USMLE", "pubmedqa": "PubMedQA-L", "medmcqa": "MedMCQA"}
 
@@ -109,7 +109,7 @@ def load_data(data_dir: Path) -> (List[str], List[Dict[str, Any]]):
 
 def make_template(args):
     data_dir = Path(args.path)
-    output_path = "usmle.html"
+    output_path = Path(args.fname)
     logger.info(f"Reading data from {data_dir}")
 
     # load the data
@@ -144,5 +144,6 @@ if __name__ == "__main__":
         description="Generate an html page to visualize the generated texts."
     )
     parser.add_argument("--path", help="path to the experiment data", required=True)
+    parser.add_argument("--fname", help="output file name", default="main.html")
     args = parser.parse_args()
     make_template(args)

@@ -254,6 +254,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--metric", help="metric to maximize", default="accuracy+accuracy@2"
     )
+
     parser.add_argument("--perm_type", help="type of permutations", default="topn")
     parser.add_argument(
         "--topn", help="number of top combinations to display", default=20, type=int
@@ -262,6 +263,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--n_options", help="number of answer options", default=4, type=int
     )
+    parser.add_argument("--sort_summary", help="sort the summary", default=0, type=int)
     parser.add_argument(
         "--max_perm",
         help="Maximum permutation budget",
@@ -292,11 +294,13 @@ if __name__ == "__main__":
     local_keys = ["labels", "predictions"]
     lengths = []
 
-    for exp in multirun_path.iterdir():
-        if not exp.is_dir():
+    for exp in sorted(multirun_path.iterdir(), key=lambda x: x.name):
+        if not exp.is_dir() or exp.name[0] == "_":
             continue
         data_file = exp / "data.json"
         config_file = exp / "config.yaml"
+        if not data_file.exists() or not config_file.exists():
+            continue
         exp_data = json.load(open(data_file, "r"))
         cfg = yaml.safe_load(open(config_file, "r"))
         exp_data["strategy"] = exp_data["strategy"].split("+")[0]
@@ -325,9 +329,10 @@ if __name__ == "__main__":
             records.append(record)
 
     summary = pd.DataFrame(summary)
-    summary = summary.sort_values(main_metric, ascending=False)
+    if args.sort_summary:
+        summary = summary.sort_values(main_metric, ascending=False)
     summary = summary.reset_index(drop=True)
-    summary.index += 1
+    # summary.index += 1
     records = pd.DataFrame(records)
 
     # plot the agreement matrix
