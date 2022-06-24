@@ -1,0 +1,4 @@
+defaults:
+  - corpus: wiki_dpr
+
+subset: False

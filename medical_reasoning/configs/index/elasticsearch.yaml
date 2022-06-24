@@ -1,11 +1,5 @@
 defaults:
+  - base
   - es_body: default
-  - corpus: wiki_dpr
 
 _target_: medical_reasoning.indexes.ElasticsearchIndex
-subset: null
-ingest_bs: 100_000
-num_proc: 4
-title_boost_weight: 1.0
-passage_length: 100
-passage_stride: 50

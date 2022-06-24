@@ -6,9 +6,10 @@ from typing import Optional
 
 import datasets
 import numpy as np
-import rich
+import torch
 from datasets import Dataset
 from datasets import DatasetDict
+from datasets.search import BatchedNearestExamplesResults
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from pydantic import BaseModel
@@ -21,18 +22,28 @@ class SearchResults(BaseModel):
     texts: List[List[str]]
 
 
+def cast_array(x):
+    if isinstance(x, torch.Tensor):
+        x = x.numpy()
+    if isinstance(x, np.ndarray):
+        x = x.tolist()
+    return x
+
+
 class Index(object):
     def __init__(
         self,
         *,
         corpus: DictConfig | DatasetDict,
         subset: Optional[int] = None,
+        prepare_corpus: bool = True,
         index_column: str = "id",
     ):
         super(Index, self).__init__()
 
         # cast and slice the corpus
-        corpus, subset = self._prepare_corpus(corpus, subset)
+        if prepare_corpus:
+            corpus, subset = self._prepare_corpus(corpus, subset)
 
         # store attribute
         self.corpus: Dataset = corpus
@@ -81,3 +92,18 @@ class Index(object):
     @abc.abstractmethod
     def __call__(self, queries: List[str], *, k: int = 10) -> SearchResults:
         raise NotImplementedError()
+
+    @staticmethod
+    def _format_batch_results(
+        batch_results: BatchedNearestExamplesResults,
+    ) -> SearchResults:
+        # format the results
+        egs = batch_results.total_examples
+        n_egs = len(egs)
+        scores = [cast_array(score) for score in batch_results.total_scores]
+        return SearchResults(
+            scores=scores,
+            indices=[egs[i]["id"] for i in range(n_egs)],
+            titles=[egs[i]["title"] for i in range(n_egs)],
+            texts=[egs[i]["text"] for i in range(n_egs)],
+        )

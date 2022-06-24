@@ -1,5 +1,6 @@
 defaults:
-  - corpus: wiki_dpr
+  - base
 
 _target_: medical_reasoning.indexes.DprIndex
-subset: null
+
+hf_model: facebook/dpr-question_encoder-single-nq-base
