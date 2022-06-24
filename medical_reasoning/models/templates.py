@@ -139,8 +139,11 @@ class MultipleChoiceTemplate(PromptTemplate):
             "none": "",
         }[self.style]
 
+        # todo: TEMPORARY -- testing
+        answer_pre = "Answer options:\n"
         prompt += (
-            f"{prepromt}{eg.question}{self.SEP}{LINE_BRAKE.join(formatted_options)}"
+            f"{prepromt}{eg.question}{self.SEP}{answer_pre}"
+            f"{LINE_BRAKE.join(formatted_options)}"
         )
 
         return prompt
