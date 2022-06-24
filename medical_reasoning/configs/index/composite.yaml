@@ -1,0 +1,31 @@
+defaults:
+  - base
+
+_target_: medical_reasoning.indexes.CompositeIndex
+p: 100
+weights:
+  dpr: 1.0
+  es: 0.5
+  es_aux: 1.0
+  es_title: 0.5
+indexes:
+  dpr:
+    _partial_: true
+    _target_: medical_reasoning.indexes.DprIndex
+  es:
+    _partial_: true
+    _target_: medical_reasoning.indexes.ElasticsearchIndex
+    column_name: text
+    use_aux_queries: False
+  es_aux:
+    _partial_: true
+    _target_: medical_reasoning.indexes.ElasticsearchIndex
+    column_name: text
+    use_aux_queries: True
+    filter_numbers: True
+  es_title:
+    _partial_: true
+    _target_: medical_reasoning.indexes.ElasticsearchIndex
+    column_name: title
+    use_aux_queries: True
+    filter_numbers: True

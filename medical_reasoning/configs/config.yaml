@@ -5,7 +5,7 @@ defaults:
   - dataset: medqa_us
   - strategy: strat__4
   - tokenizer: gpt2
-  - index: dpr
+  - index: composite
   - model: ada
   - sys: local
   - hydra: default
@@ -22,6 +22,7 @@ shots: 0
 n_samples: 1
 temperature: 0
 max_tokens: 1024
+num_workers: 1
 
 # technicals
 print_config: true

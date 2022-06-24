@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import math
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -95,7 +96,11 @@ def load_data(data_dir: Path) -> (List[str], List[Dict[str, Any]]):
 
     # format
     strategies = list(set.union(*[set(q.keys()) for q in answers.values()]))
-    strategies = list(sorted(strategies, key=lambda s: ORDERING.index(s)))
+    strategies = list(
+        sorted(
+            strategies, key=lambda s: ORDERING.index(s) if s in ORDERING else math.inf
+        )
+    )
     data = []
     for qid, question in questions.items():
         data.append(

@@ -3,3 +3,6 @@ defaults:
   - es_body: default
 
 _target_: medical_reasoning.indexes.ElasticsearchIndex
+column_name: text
+use_aux_queries: False
+filter_numbers: False

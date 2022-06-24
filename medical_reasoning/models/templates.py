@@ -93,6 +93,10 @@ class MultipleChoiceTemplate(PromptTemplate):
         steps = [s for s in steps if len(s)]
         return self.SEP.join(steps)
 
+    @property
+    def description(self) -> str:
+        return "--"
+
     def zero_shot_prompt(self, eg: Example):
 
         # select the preprompt

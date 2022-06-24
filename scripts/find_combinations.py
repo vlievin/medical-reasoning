@@ -210,7 +210,7 @@ def plot_agreement_matrix(summary, output_path):
             if j < i:
                 row_i = summary.iloc[i]
                 row_j = summary.iloc[j]
-                assert row_i["labels"] == row_j["labels"]
+                assert row_i["locators"] == row_j["locators"]
                 # labels = row_i["labels"]
                 y_i = row_i["predictions"]
                 y_j = row_j["predictions"]
@@ -241,7 +241,8 @@ def plot_agreement_matrix(summary, output_path):
 def strategy2idx(summary: pd.DataFrame, strategy: str):
     strategies = summary["strategy"]
     matches = strategies[strategies == strategy].index
-    assert len(matches) == 1
+    if len(matches) != 1:
+        raise ValueError(f"strategy {strategy} not matched (matches: {matches})")
     return matches[0]
 
 
@@ -322,10 +323,11 @@ if __name__ == "__main__":
         summary.append(exp_data)
 
         # read all individual records
-        for i in range(len(exp_data["predictions"])):
-            record = {k: exp_data[k][i] for k in local_keys}
+        qids = exp_data["locators"]
+        for i, qid in sorted(enumerate(qids), key=lambda x: x[1]):
+            record = {key: exp_data[key][i] for key in local_keys}
             record.update({k: v for k, v in exp_data.items() if k in glob_keys})
-            record["qid"] = i
+            record["qid"] = qid
             records.append(record)
 
     summary = pd.DataFrame(summary)

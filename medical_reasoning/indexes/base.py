@@ -90,7 +90,9 @@ class Index(object):
                 )
 
     @abc.abstractmethod
-    def __call__(self, queries: List[str], *, k: int = 10) -> SearchResults:
+    def __call__(
+        self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
+    ) -> SearchResults:
         raise NotImplementedError()
 
     @staticmethod

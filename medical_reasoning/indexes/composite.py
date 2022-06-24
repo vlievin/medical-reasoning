@@ -21,7 +21,7 @@ def flatten(x):
         yield x
 
 
-class MultiIndex(Index):
+class CompositeIndex(Index):
     def __init__(
         self,
         *,
@@ -31,7 +31,7 @@ class MultiIndex(Index):
         indexes: Dict[str, functools.partial],
         weights: Dict[str, float],
     ):
-        super(MultiIndex, self).__init__(
+        super(CompositeIndex, self).__init__(
             corpus=corpus, subset=subset, prepare_corpus=True
         )
         self.p = p
@@ -44,10 +44,12 @@ class MultiIndex(Index):
         }
         self.weights = weights
 
-    def __call__(self, queries: List[str], *, k: int = 10) -> SearchResults:
+    def __call__(
+        self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
+    ) -> SearchResults:
         # query the index
         all_results = {
-            index_name: index(queries, k=self.p)
+            index_name: index(queries, aux_queries=aux_queries, k=self.p)
             for index_name, index in self.indexes.items()
         }
 
@@ -70,7 +72,10 @@ class MultiIndex(Index):
                         idx: score
                         for idx, score in zip(results.indices[i], results.scores[i])
                     }
-                    min_scores = min(scores_i.values())
+                    if len(scores_i):
+                        min_scores = min(scores_i.values())
+                    else:
+                        min_scores = 0.0
                     scores_by_index_i[idx] += weight * scores_i.get(idx, min_scores)
 
         # sort the results

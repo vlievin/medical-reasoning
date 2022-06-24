@@ -38,7 +38,9 @@ class DprIndex(Index):
         return output.pooler_output
 
     @torch.no_grad()
-    def __call__(self, queries: List[str], *, k: int = 10) -> SearchResults:
+    def __call__(
+        self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
+    ) -> SearchResults:
         # encode the queries
         vecs = self.encode(queries)
 
