@@ -123,7 +123,7 @@ class Preprocessing(TorchDataset):
 
         # potentially permute
         if self.permute_options:
-            eg = permute_eg(eg, seed=seed + 1)
+            eg = permute_eg(eg, seed=seed)
 
         if len(eg.documents) == 0 and self.index is not None:
             eg = self.sample_documents(eg)

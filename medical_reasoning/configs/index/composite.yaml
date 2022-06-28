@@ -5,9 +5,9 @@ _target_: medical_reasoning.indexes.CompositeIndex
 p: 100
 weights:
   dpr: 1.0
-  es: 0.5
-  es_aux: 1.0
-  es_title: 0.5
+  es: 0.66
+  es_aux: 1.5
+  es_title: 0.33
 indexes:
   dpr:
     _partial_: true
