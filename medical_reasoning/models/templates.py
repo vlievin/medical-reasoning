@@ -16,7 +16,13 @@ from medical_reasoning.models.functional.infer_answer import infer_answer_from_c
 from medical_reasoning.utils.datastruct import Example
 
 LINE_BRAKE = "\n"
-ACCEPTED_STYLES = {"full", "short", "none"}
+ACCEPTED_STYLES = {"full2", "full", "short", "none"}
+
+def format_option(symbol, option):
+    return f"{symbol}) {option}"
+
+def format_option_2(symbol, option):
+    return f"({symbol}) {option}"
 
 
 def get_start_indices(target: str | List, pattern: str) -> list[int]:
@@ -101,14 +107,15 @@ class MultipleChoiceTemplate(PromptTemplate):
 
         # select the preprompt
         prepromt = {
+            "full2": "Answer: ",
             "full": "Answer: ",
             "short": "A: ",
             "none": "",
         }[self.style]
 
         return (
-            f"{prepromt}among {eg.allowed_options[0]} "
-            f"through {eg.allowed_options[-1]}, the answer is"
+            f"{prepromt}among {eg.option_symbols[0]} "
+            f"through {eg.option_symbols[-1]}, the answer is"
         )
 
     def format_question(self, eg: Example) -> str:
@@ -118,31 +125,44 @@ class MultipleChoiceTemplate(PromptTemplate):
             if eg.documents is None or len(eg.documents) == 0:
                 raise ValueError("documents must be provided if use_documents is True")
             docs = eg.documents
-            if len(eg.documents) == len(eg.allowed_options):
+            if len(eg.documents) == len(eg.option_symbols):
                 # trick to add letters to each documents
                 docs = [
                     f"Document {o}. {doc}"
-                    for doc, o in zip(eg.documents, eg.allowed_options)
+                    for doc, o in zip(eg.documents, eg.option_symbols)
                 ]
 
             formatted_documents = "\n".join(docs)
             prompt += f"Context: {formatted_documents}\n\n"
 
+        opt_format = {
+            'full2': format_option_2,
+            'full': format_option,
+            'short': format_option,
+            'none': format_option,
+        }[self.style]
+
         formatted_options = [
-            f"{eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)
+            opt_format(eg.option_symbols[i], option) for i, option in enumerate(eg.options)
         ]
 
         # select the preprompt
-        prepromt = {
+        question_prepromt = {
+            "full2": "Question: ",
             "full": "Question: ",
             "short": "Q: ",
             "none": "",
         }[self.style]
 
-        # todo: TEMPORARY -- testing
-        answer_pre = "Answer options:\n"
+        option_prepromt = {
+            "full2": "Answer choices:\n",
+            "full": "",
+            "short": "",
+            "none": "",
+        }[self.style]
+
         prompt += (
-            f"{prepromt}{eg.question}{self.SEP}{answer_pre}"
+            f"{question_prepromt}{eg.question}{self.SEP}{option_prepromt}"
             f"{LINE_BRAKE.join(formatted_options)}"
         )
 
@@ -160,7 +180,7 @@ class MultipleChoiceTemplate(PromptTemplate):
         pred = infer_answer_from_choices(
             prompt_answer,
             options=eg.options,
-            option_symbols=eg.allowed_options,
+            option_symbols=eg.option_symbols,
             pre_answer=pre_answer,
         )
         return pred
@@ -187,11 +207,12 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
     def format_strategy(self, eg: Example) -> str:
         # format the strategy
         strategy = copy(self.strategy)
-        strategy = strategy.replace(self.first_symbol_pattern, eg.allowed_options[0])
-        strategy = strategy.replace(self.last_symbol_pattern, eg.allowed_options[-1])
+        strategy = strategy.replace(self.first_symbol_pattern, eg.option_symbols[0])
+        strategy = strategy.replace(self.last_symbol_pattern, eg.option_symbols[-1])
 
         # select the preprompt
         prepromt = {
+            "full2": "Answer: ",
             "full": "Answer: ",
             "short": "A: ",
             "none": "",
@@ -233,8 +254,8 @@ class ExtractionMultipleChoiceTemplate(MultipleChoiceTemplate):
     @staticmethod
     def extractive_prompt(eg: Example) -> str:
         return (
-            f"\n\nTherefore, among {eg.allowed_options[0]} "
-            f"through {eg.allowed_options[-1]}, the answer is"
+            f"\n\nTherefore, among {eg.option_symbols[0]} "
+            f"through {eg.option_symbols[-1]}, the answer is"
         )
 
     def simulate_completion(self, eg: Example) -> str:
@@ -258,6 +279,7 @@ class UncertaintyTemplate(PromptTemplate):
     def uncertainty_prompt(self, eg: Example) -> str:
 
         prepromt = {
+            "full2": "Confidence: ",
             "full": "Confidence: ",
             "short": "",
             "none": "",
@@ -284,7 +306,7 @@ class UncertaintyTemplate(PromptTemplate):
         answer = infer_answer_from_choices(
             prompt_answer,
             options=eg.options,
-            option_symbols=eg.allowed_options,
+            option_symbols=eg.option_symbols,
             pre_answer=None,
         )
 
@@ -295,13 +317,13 @@ class UncertaintyTemplate(PromptTemplate):
             options=5 * [""],
             documents=[],
             reasoning=None,
-            allowed_options=["1", "2", "3", "4", "5"],
+            option_symbols=["1", "2", "3", "4", "5"],
             answer_idx=-1,
         )
         confidence = infer_answer_from_choices(
             prompt_answer,
             options=pseudo_eg.options,
-            option_symbols=pseudo_eg.allowed_options,
+            option_symbols=pseudo_eg.option_symbols,
             pre_answer=None,
         )
 

@@ -36,17 +36,38 @@ from medical_reasoning.utils.preprocessing import Preprocessing
 
 SEPARATOR = "-" * 80 + "\n"
 
+
+def make_info(prompt_style, permute_options, n_docs, shots):
+    info_name = prompt_style
+
+    if bool(permute_options):
+        info_name += "-permuted"
+
+    if int(n_docs) > 0:
+        info_name += f"-{n_docs}docs"
+
+    if int(shots) > 0:
+        info_name += f"-{shots}shots"
+
+    return info_name
+
+
 OmegaConf.register_new_resolver("if", lambda x, y, z: y if x else z)
 OmegaConf.register_new_resolver("len", len)
 OmegaConf.register_new_resolver("whoami", lambda: os.environ.get("USER"))
 OmegaConf.register_new_resolver("getcwd", os.getcwd)
 OmegaConf.register_new_resolver("hostname", socket.gethostname)
 OmegaConf.register_new_resolver("shorten", lambda x, y: str(slugify(x))[: int(y)])
+OmegaConf.register_new_resolver("make_info", make_info)
 
 warnings.filterwarnings(
     action="ignore",
     category=ElasticsearchWarning,
 )
+
+
+def get_first_el(x):
+    return x[0]
 
 
 @hydra.main(
@@ -83,7 +104,7 @@ def run(config: DictConfig) -> None:
     builder: DatasetBuilder = instantiate(config.dataset)
     dataset = builder()
     splits = list(dataset.keys())
-    allowed_options = builder.options
+    option_symbols = builder.options
     dataset_stats = DatasetStats()(dataset)
     json.dump(dataset_stats, Path("dataset_stats.json").open("w"), indent=2)
 
@@ -93,8 +114,9 @@ def run(config: DictConfig) -> None:
         split: Preprocessing(
             dataset[split],
             config=config,
-            allowed_options=allowed_options,
+            option_symbols=option_symbols,
             use_index=use_index,
+            permute_options=config.permute_options,
         )
         for split in dataset.keys()
     }
@@ -118,7 +140,7 @@ def run(config: DictConfig) -> None:
             num_workers=config.num_workers,
             batch_size=1,
             shuffle=False,
-            collate_fn=lambda x: x[0],
+            collate_fn=get_first_el,
         )
         for i, (row_idx, eg, shots) in (
             pbar := tqdm(enumerate(loader), unit="question", total=len(loader.dataset))
@@ -172,8 +194,7 @@ def run(config: DictConfig) -> None:
             "f1": f1_score(labels, preds, average="macro"),
             "engine": model.engine,
             "strategy": model.strategy,
-            "shots": int(config.shots),
-            "n_docs": int(config.n_docs),
+            "info": config.info,
             "cost": float(model.total_cost),
             "calls": int(model.n_calls),
             "n_missing": n_missing,
@@ -216,7 +237,7 @@ def format_prediction(
 ) -> str:
     """Format the prediction for a given example."""
     formatted_options = "\n".join(
-        [f"   {eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)]
+        [f"   {eg.option_symbols[i]}) {option}" for i, option in enumerate(eg.options)]
     )
     formatted_flows = ""
     for i, flow in enumerate(flows):
@@ -247,8 +268,7 @@ def format_results_as_table(all_results) -> Table:
         "f1": ".2%",
         "engine": "<20",
         "strategy": "<32",
-        "n_docs": "",
-        "shots": "",
+        "info": "",
         "cost": ".2f",
         "calls": "",
     }

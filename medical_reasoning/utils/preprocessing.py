@@ -10,7 +10,6 @@ from typing import Tuple
 
 import numpy as np
 import rich
-import torch.utils
 from datasets import Dataset
 from hydra.utils import instantiate
 from omegaconf import DictConfig
@@ -21,6 +20,7 @@ from medical_reasoning.datasets.stats import DatasetStats
 from medical_reasoning.indexes import ElasticsearchIndex
 from medical_reasoning.indexes.base import Index
 from medical_reasoning.utils.datastruct import Example
+from medical_reasoning.utils.datastruct import permute_eg
 
 
 class Preprocessing(TorchDataset):
@@ -30,15 +30,17 @@ class Preprocessing(TorchDataset):
         self,
         dataset: Dataset,
         config: DictConfig,
-        allowed_options: List[str],
+        option_symbols: List[str],
         use_index: bool,
+        permute_options: bool = False,
     ):
         # store the attributes
         self.dataset = dataset
         self.config = config
-        self.allowed_options = allowed_options
+        self.option_symbols = option_symbols
         self.use_index = use_index
         self._is_instantiated = False
+        self.permute_options = permute_options
 
     def __getitem__(self, item) -> Tuple[int, Example, List[Example]]:
         # dynamically instantiate the dataset if not yet done
@@ -46,20 +48,17 @@ class Preprocessing(TorchDataset):
             self._instantiate()
 
         # get the row of data, validate and potentially sample documents
-        eg = Preprocessing.make_eg(
+        eg = self.make_eg(
             self.dataset[item],
-            self.allowed_options,
-            index=self.index,
-            config=self.config,
+            self.option_symbols,
+            seed=item,
         )
 
         # samples the shots
         shots = self.make_shots_egs(
             self.shots_dataset,
             item,
-            self.allowed_options,
-            index=self.index,
-            config=self.config,
+            self.option_symbols,
         )
 
         return (item, eg, shots)
@@ -69,7 +68,7 @@ class Preprocessing(TorchDataset):
 
     def _instantiate(self):
         # initialize the dataset used for the shots
-        self.shots_dataset = Preprocessing.make_shots_dataset(self.config)
+        self.shots_dataset = self.make_shots_dataset(self.config)
         # setup the index
         if self.use_index:
             self.index: Optional[Index] = instantiate(self.config.index)
@@ -88,46 +87,46 @@ class Preprocessing(TorchDataset):
         self.__dict__ = state
         self._is_instantiated = False
 
-    @staticmethod
     def make_shots_egs(
+        self,
         shots_dataset: Dataset,
         row_idx: int,
-        allowed_options: List,
-        *,
-        index: Optional[ElasticsearchIndex],
-        config: DictConfig,
+        option_symbols: List,
     ) -> List[Example]:
         """Sample a bunch of Examples from the Shots dataset."""
         shots = []
-        if config.shots > 0:
+        if self.config.shots > 0:
             rgn = np.random.RandomState(row_idx)
             shots_indices = rgn.choice(
-                list(range(len(shots_dataset))), size=config.shots, replace=False
+                list(range(len(shots_dataset))), size=self.config.shots, replace=False
             )
             for j in shots_indices:
                 shots.append(
-                    Preprocessing.make_eg(
+                    self.make_eg(
                         shots_dataset[int(j)],
-                        allowed_options,
-                        index=index,
-                        config=config,
+                        option_symbols,
+                        seed=j,
                     )
                 )
 
         return shots
 
-    @staticmethod
     def make_eg(
+        self,
         row: Dict[str, Any],
-        allowed_options: List,
+        option_symbols: List,
         *,
-        index: Optional[ElasticsearchIndex],
-        config: DictConfig,
+        seed: int,
     ) -> Example:
         """Make an example from a row of data. Potentially sample the index."""
-        eg = Example(**row, allowed_options=allowed_options)
-        if len(eg.documents) == 0 and index is not None:
-            eg = Preprocessing.sample_documents(eg, index=index, config=config)
+        eg = Example(**row, option_symbols=option_symbols)
+
+        # potentially permute
+        if self.permute_options:
+            eg = permute_eg(eg, seed=seed)
+
+        if len(eg.documents) == 0 and self.index is not None:
+            eg = self.sample_documents(eg)
 
         return eg
 
@@ -167,8 +166,7 @@ class Preprocessing(TorchDataset):
         json.dump(shots_stats, Path("shots_stats.json").open("w"), indent=2)
         return shots_dataset
 
-    @staticmethod
-    def sample_documents(eg: Example, *, index: Index, config: DictConfig):
+    def sample_documents(self, eg: Example):
         """Sample the documents for a given example."""
         if eg.question_clean is not None:
             base_query = eg.question_clean
@@ -176,7 +174,7 @@ class Preprocessing(TorchDataset):
             base_query = eg.question
 
         queries = [f"{base_query} {opt}" for opt in eg.options]
-        results = index(queries, aux_queries=eg.options, k=config.n_docs)
+        results = self.index(queries, aux_queries=eg.options, k=self.config.n_docs)
         documents = []
         if len(results.texts) != len(results.titles):
             raise ValueError("text and title must be of the same length")

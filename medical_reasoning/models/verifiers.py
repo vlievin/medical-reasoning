@@ -32,12 +32,12 @@ class MajorityVotingVerifier(Verifier):
         meta["answer_frequencies"] = freqs
 
         # compute the probabilities
-        probs = np.zeros((len(eg.allowed_options),))
+        probs = np.zeros((len(eg.option_symbols),))
         for a in answer_candidates:
             if a is None:
-                i = np.random.randint(0, len(eg.allowed_options))
+                i = np.random.randint(0, len(eg.option_symbols))
             else:
-                i = eg.allowed_options.index(a)
+                i = eg.option_symbols.index(a)
             probs[i] += 1
 
         probs /= len(answer_candidates)
