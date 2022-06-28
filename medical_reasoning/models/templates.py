@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import hashlib
 import re
 from collections import OrderedDict
 from copy import copy
@@ -10,7 +11,7 @@ from typing import List
 from typing import Optional
 from typing import T
 
-import rich
+import numpy as np
 
 from medical_reasoning.models.functional.infer_answer import infer_answer_from_choices
 from medical_reasoning.utils.datastruct import Example
@@ -18,8 +19,10 @@ from medical_reasoning.utils.datastruct import Example
 LINE_BRAKE = "\n"
 ACCEPTED_STYLES = {"full2", "full", "short", "none"}
 
+
 def format_option(symbol, option):
     return f"{symbol}) {option}"
+
 
 def format_option_2(symbol, option):
     return f"({symbol}) {option}"
@@ -37,6 +40,25 @@ def safe_min(lst: T) -> Optional[T]:
         return None
 
 
+class AnswerChoicesFormat:
+    @staticmethod
+    def style_1(eg: Example):
+        return f"among {eg.option_symbols[0]} through {eg.option_symbols[-1]}"
+
+    def style_2(eg: Example):
+        return (
+            f"between {', '.join(eg.option_symbols[0:-1])} or {eg.option_symbols[-1]}"
+        )
+
+    def style_3(eg: Example):
+        x = hashlib.sha256(str(eg.uid).encode("utf-8"))
+        seed = int(x.hexdigest(), base=16) % 2 ** 32
+        rgn = np.random.RandomState(seed)
+        option_symbols = copy(eg.option_symbols)
+        rgn.shuffle(option_symbols)
+        return f"between {', '.join(option_symbols[0:-1])} or {option_symbols[-1]}"
+
+
 class PromptTemplate(object):
     name = "prompt"
     SEP = "\n\n"
@@ -44,6 +66,19 @@ class PromptTemplate(object):
     _completion_config = {}
 
     def __init__(self, *, style: str = "full"):
+        self._style = style
+        style_parts = self._style.split("-")
+        if len(style_parts) > 1:
+            style, answer_style = style_parts
+        else:
+            style, answer_style = style_parts[0], "1"
+
+        self.answer_fmt = {
+            "1": AnswerChoicesFormat.style_1,
+            "2": AnswerChoicesFormat.style_2,
+            "3": AnswerChoicesFormat.style_3,
+        }[answer_style]
+
         if style not in ACCEPTED_STYLES:
             raise ValueError(
                 f"style {style} is not recognized. Accepted styles are: {ACCEPTED_STYLES}"
@@ -113,10 +148,7 @@ class MultipleChoiceTemplate(PromptTemplate):
             "none": "",
         }[self.style]
 
-        return (
-            f"{prepromt}among {eg.option_symbols[0]} "
-            f"through {eg.option_symbols[-1]}, the answer is"
-        )
+        return f"{prepromt}{self.answer_fmt(eg)}, the answer is"
 
     def format_question(self, eg: Example) -> str:
         prompt = ""
@@ -136,14 +168,15 @@ class MultipleChoiceTemplate(PromptTemplate):
             prompt += f"Context: {formatted_documents}\n\n"
 
         opt_format = {
-            'full2': format_option_2,
-            'full': format_option,
-            'short': format_option,
-            'none': format_option,
+            "full2": format_option_2,
+            "full": format_option,
+            "short": format_option,
+            "none": format_option,
         }[self.style]
 
         formatted_options = [
-            opt_format(eg.option_symbols[i], option) for i, option in enumerate(eg.options)
+            opt_format(eg.option_symbols[i], option)
+            for i, option in enumerate(eg.options)
         ]
 
         # select the preprompt
@@ -251,12 +284,8 @@ class ExtractionMultipleChoiceTemplate(MultipleChoiceTemplate):
         steps = [s for s in steps if len(s)]
         return self.SEP.join(steps)
 
-    @staticmethod
-    def extractive_prompt(eg: Example) -> str:
-        return (
-            f"\n\nTherefore, among {eg.option_symbols[0]} "
-            f"through {eg.option_symbols[-1]}, the answer is"
-        )
+    def extractive_prompt(self, eg: Example) -> str:
+        return f"\n\nTherefore, {self.answer_fmt(eg)}, the answer is"
 
     def simulate_completion(self, eg: Example) -> str:
         return f" {eg.answer_symbol}) {eg.answer}."
@@ -277,7 +306,6 @@ class UncertaintyTemplate(PromptTemplate):
         return self.SEP.join(steps)
 
     def uncertainty_prompt(self, eg: Example) -> str:
-
         prepromt = {
             "full2": "Confidence: ",
             "full": "Confidence: ",
@@ -344,7 +372,7 @@ def auto_templates(**templates) -> OrderedDict:
     ):
         assert isinstance(templates[1][1], ExtractionMultipleChoiceTemplate)
         direct_template = MultipleChoiceTemplate(
-            use_documents=first_template.use_documents, style=first_template.style
+            use_documents=first_template.use_documents, style=first_template._style
         )
         templates = [("direct", direct_template)] + templates[2:]
 
