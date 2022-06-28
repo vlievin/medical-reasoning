@@ -52,6 +52,6 @@ strategies = "experiment -m dataset=medqa_us dataset.splits=validation dataset.s
 styles = "experiment -m dataset=medqa_us dataset.splits=validation dataset.subset=100 strategy=strat_4,strat_7 prompt_style=none,short,full"
 medqa_test = "experiment -m dataset=medqa_us dataset.splits=test model=davinci 'strategy=glob(strat__*)' prompt_style=short"
 pubmedqa_test = "experiment -m dataset=pubmedqa dataset.splits=test model=davinci 'strategy=glob(strat__*)' prompt_style=full n_docs=1"
-medmcqa_valid = "experiment -m dataset=medmcqa dataset.splits=validation dataset.subset=100 model=davinci 'strategy=strat__0,strat__1' prompt_style=full n_docs=0,1"
+medmcqa_valid = "experiment -m dataset=medmcqa dataset.splits=validation dataset.subset=300 model=davinci 'strategy=strat__0,strat__1,strat__4' prompt_style=full n_docs=0,1"
 find_combinations = "python -m scripts.find_combinations"
 generate_html = "python -m scripts.generate_html"
