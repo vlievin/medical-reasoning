@@ -157,12 +157,19 @@ class MultipleChoiceTemplate(PromptTemplate):
             if eg.documents is None or len(eg.documents) == 0:
                 raise ValueError("documents must be provided if use_documents is True")
             docs = eg.documents
-            if len(eg.documents) == len(eg.option_symbols):
-                # trick to add letters to each documents
-                docs = [
-                    f"Document {o}. {doc}"
-                    for doc, o in zip(eg.documents, eg.option_symbols)
-                ]
+            if len(docs) == len(eg.option_symbols):
+                if len(set(docs)) == 1:
+                    # if all documents are identical, use the first one
+                    docs = [docs[0]]
+                else:
+                    # if there is one document per answer option, assume
+                    # each document was sampled
+                    # for each option, and add a `Document <option>` at
+                    # the beginning of each document
+                    docs = [
+                        f"Document {o}. {doc}"
+                        for doc, o in zip(eg.documents, eg.option_symbols)
+                    ]
 
             formatted_documents = "\n".join(docs)
             prompt += f"Context: {formatted_documents}\n\n"

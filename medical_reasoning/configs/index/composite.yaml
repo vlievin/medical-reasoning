@@ -10,8 +10,10 @@ passage_stride: 50
 
 weights:
   es: 1.0
-
+  dpr: 1.0
+  
 indexes:
   es:
     _partial_: true
-    _target_: medical_reasoning.indexes.ElasticsearchIndex
+  dpr:
+    _partial: true
