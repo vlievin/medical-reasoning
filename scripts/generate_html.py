@@ -114,7 +114,7 @@ def load_data(data_dir: Path) -> (List[str], List[Dict[str, Any]]):
 
 def make_template(args):
     data_dir = Path(args.path)
-    output_path = Path(args.fname)
+    output_path = data_dir / Path(args.fname)
     logger.info(f"Reading data from {data_dir}")
 
     # load the data

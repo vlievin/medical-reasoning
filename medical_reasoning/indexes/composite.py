@@ -6,8 +6,6 @@ from typing import List
 from typing import Optional
 
 import faiss.contrib.torch_utils  # type: ignore
-from datasets import DatasetDict
-from omegaconf import DictConfig
 
 from medical_reasoning.indexes.base import Index
 from medical_reasoning.indexes.base import SearchResults
@@ -23,29 +21,26 @@ def flatten(x):
 
 class CompositeIndex(Index):
     def __init__(
-        self,
-        *,
-        corpus: DictConfig | DatasetDict,
-        subset: Optional[int] = None,
-        p: int,
-        indexes: Dict[str, functools.partial],
-        weights: Dict[str, float],
+            self,
+            *,
+            p: int,
+            indexes: Dict[str, functools.partial],
+            weights: Dict[str, float],
+            **kwargs
     ):
-        super(CompositeIndex, self).__init__(
-            corpus=corpus, subset=subset, prepare_corpus=True
-        )
+        super().__init__(**kwargs, prepare_corpus=True)
         self.p = p
         assert set(indexes.keys()) == set(weights.keys())
         self.indexes = {
             name: index_partial(
-                corpus=self.corpus, subset=self.subset, prepare_corpus=False
+                **self.base_args, prepare_corpus=False
             )
             for name, index_partial in indexes.items()
         }
         self.weights = weights
 
     def __call__(
-        self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
+            self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
     ) -> SearchResults:
         # query the index
         all_results = {

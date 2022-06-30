@@ -1,4 +1,7 @@
 defaults:
-  - corpus: wiki_dpr
+  - corpus: wiki
 
 subset: False
+passage_length: 100
+passage_stride: 50
+num_proc: ${num_proc}

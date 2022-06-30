@@ -4,11 +4,7 @@ from typing import List
 from typing import Optional
 
 import faiss.contrib.torch_utils  # type: ignore
-import numpy as np
-import rich
 import torch
-from datasets import DatasetDict
-from omegaconf import DictConfig
 from transformers import DPRQuestionEncoder
 from transformers import DPRQuestionEncoderTokenizer
 from transformers.models.dpr.modeling_dpr import DPRQuestionEncoderOutput
@@ -19,16 +15,12 @@ from medical_reasoning.indexes.base import SearchResults
 
 class DprIndex(Index):
     def __init__(
-        self,
-        *,
-        corpus: DictConfig | DatasetDict,
-        subset: Optional[int] = None,
-        prepare_corpus: bool = True,
-        hf_model: str = "facebook/dpr-question_encoder-single-nq-base",
+            self,
+            *,
+            hf_model: str = "facebook/dpr-question_encoder-single-nq-base",
+            **kwargs
     ):
-        super(DprIndex, self).__init__(
-            corpus=corpus, subset=subset, prepare_corpus=prepare_corpus
-        )
+        super().__init__(**kwargs)
         self.encoder = DPRQuestionEncoder.from_pretrained(hf_model)
         self.tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(hf_model)
 
@@ -39,7 +31,7 @@ class DprIndex(Index):
 
     @torch.no_grad()
     def __call__(
-        self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
+            self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
     ) -> SearchResults:
         # encode the queries
         vecs = self.encode(queries)

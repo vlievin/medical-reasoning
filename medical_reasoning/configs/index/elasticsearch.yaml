@@ -4,5 +4,8 @@ defaults:
 
 _target_: medical_reasoning.indexes.ElasticsearchIndex
 column_name: text
-use_aux_queries: False
-filter_numbers: False
+filter_numbers: True
+corpus_name: ${index.corpus.path}-${index.corpus.name}
+aux_weights:
+  text: 1.0
+  title: 0.5
