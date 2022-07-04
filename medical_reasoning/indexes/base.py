@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import abc
 from copy import copy
-from typing import List, Dict
+from typing import Dict
+from typing import List
 from typing import Optional
 
 import datasets
@@ -36,22 +37,23 @@ def cast_array(x):
 
 class Index(object):
     def __init__(
-            self,
-            *,
-            corpus: DictConfig | DatasetDict,
-            subset: Optional[int] = None,
-            index_column: str = "id",
-            passage_length: Optional[int] = None,
-            passage_stride: Optional[int] = None,
-            num_proc: int = 1,
-            prepare_corpus: bool = True,
+        self,
+        *,
+        corpus: DictConfig | DatasetDict,
+        subset: Optional[int] = None,
+        index_column: str = "id",
+        passage_length: Optional[int] = None,
+        passage_stride: Optional[int] = None,
+        num_proc: int = 1,
+        prepare_corpus: bool = True,
     ):
         super().__init__()
 
         # cast and slice the corpus
         if prepare_corpus:
-            corpus, subset = self._prepare_corpus(corpus, subset, passage_length, passage_stride,
-                                                  num_proc)
+            corpus, subset = self._prepare_corpus(
+                corpus, subset, passage_length, passage_stride, num_proc
+            )
 
         # store attribute
         self.corpus: Dataset = corpus
@@ -77,8 +79,14 @@ class Index(object):
         args = copy(self.__dict__)
         return {k: v for k, v in args.items() if k in base_arg_names}
 
-    def _prepare_corpus(self, corpus, subset, passage_length: Optional[int] = None,
-                        passage_stride: Optional[int] = None, num_proc: int = 1):
+    def _prepare_corpus(
+        self,
+        corpus,
+        subset,
+        passage_length: Optional[int] = None,
+        passage_stride: Optional[int] = None,
+        num_proc: int = 1,
+    ):
         if isinstance(corpus, DictConfig):
             corpus: DatasetDict | Dataset = instantiate(corpus)
         if isinstance(corpus, DatasetDict):
@@ -104,8 +112,8 @@ class Index(object):
                 batch_size=5,
             )
             # add `id` column
-            if 'id' in corpus.column_names:
-                corpus = corpus.remove_columns(['id'])
+            if "id" in corpus.column_names:
+                corpus = corpus.remove_columns(["id"])
             corpus = corpus.add_column("id", list(range(1, len(corpus) + 1)))
 
         return corpus, subset
@@ -116,7 +124,6 @@ class Index(object):
                 f"The corpus must contain at least the columns 'id', 'text' and 'title'."
                 f"Found {self.corpus.column_names}"
             )
-
 
         # check the first element
         first_idx = self.corpus[0][self.index_column]
@@ -129,10 +136,10 @@ class Index(object):
         bs = 100
         nmax = 1000
         for i in range(0, nmax, bs):
-            batch = self.corpus[i: i + bs]
+            batch = self.corpus[i : i + bs]
             ids = batch[self.index_column]
             if not all(
-                    [int(ids[j + 1]) == int(ids[j]) + 1 for j in range(len(ids) - 1)]
+                [int(ids[j + 1]) == int(ids[j]) + 1 for j in range(len(ids) - 1)]
             ):
                 raise ValueError(
                     "Index is not contiguous. "
@@ -142,13 +149,13 @@ class Index(object):
 
     @abc.abstractmethod
     def __call__(
-            self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
+        self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
     ) -> SearchResults:
         raise NotImplementedError()
 
     @staticmethod
     def _format_batch_results(
-            batch_results: BatchedNearestExamplesResults,
+        batch_results: BatchedNearestExamplesResults,
     ) -> SearchResults:
         # format the results
         egs = batch_results.total_examples

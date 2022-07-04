@@ -15,10 +15,10 @@ from medical_reasoning.indexes.base import SearchResults
 
 class DprIndex(Index):
     def __init__(
-            self,
-            *,
-            hf_model: str = "facebook/dpr-question_encoder-single-nq-base",
-            **kwargs
+        self,
+        *,
+        hf_model: str = "facebook/dpr-question_encoder-single-nq-base",
+        **kwargs
     ):
         super().__init__(**kwargs)
         self.encoder = DPRQuestionEncoder.from_pretrained(hf_model)
@@ -31,7 +31,7 @@ class DprIndex(Index):
 
     @torch.no_grad()
     def __call__(
-            self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
+        self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
     ) -> SearchResults:
         # encode the queries
         vecs = self.encode(queries)

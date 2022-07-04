@@ -4,19 +4,19 @@ from typing import Optional
 
 import rich
 from elasticsearch import Elasticsearch
-from elasticsearch import RequestError
 from elasticsearch import helpers as es_helpers
+from elasticsearch import RequestError
 from loguru import logger
 
 
 def es_search_bulk(
-        es_instance: Elasticsearch,
-        *,
-        index_name: str,
-        queries: List[str],
-        aux_queries: List[str],
-        aux_weights: Optional[Dict[str, float]] = None,
-        k: int = 10,
+    es_instance: Elasticsearch,
+    *,
+    index_name: str,
+    queries: List[str],
+    aux_queries: List[str],
+    aux_weights: Optional[Dict[str, float]] = None,
+    k: int = 10,
 ):
     """Batch query an ElasticSearch Index"""
     es_request = []
@@ -38,18 +38,22 @@ def es_search_bulk(
         # these are the auxiliary queries
         if aux_queries is not None:
             if aux_weights is None:
-                raise ValueError("aux_weights must be provided if aux_queries is not None")
+                raise ValueError(
+                    "aux_weights must be provided if aux_queries is not None"
+                )
 
             for field, weight in aux_weights.items():
-                query_parts.append({
-                    'match': {
-                        field: {
-                            "query": aux_queries[i],
-                            "operator": "or",
-                            "boost": weight,
+                query_parts.append(
+                    {
+                        "match": {
+                            field: {
+                                "query": aux_queries[i],
+                                "operator": "or",
+                                "boost": weight,
+                            }
                         }
                     }
-                })
+                )
 
         # make the final request
         es_request_i = {
@@ -94,7 +98,7 @@ def es_search_bulk(
 
 
 def es_create_index(
-        es_instance: Elasticsearch, index_name: str, body: Optional[Dict] = None
+    es_instance: Elasticsearch, index_name: str, body: Optional[Dict] = None
 ) -> bool:
     """
     Create ElasticSearch Index
@@ -121,14 +125,14 @@ def es_remove_index(es_instance: Elasticsearch, index_name: str):
 
 
 def es_ingest_bulk(
-        es_instance: Elasticsearch,
-        index_name: str,
-        *,
-        content: List[str],
-        title: List[str],
-        idx: List[str],
-        chunk_size=1000,
-        request_timeout=200,
+    es_instance: Elasticsearch,
+    index_name: str,
+    *,
+    content: List[str],
+    title: List[str],
+    idx: List[str],
+    chunk_size=1000,
+    request_timeout=200,
 ):
     actions = [
         {

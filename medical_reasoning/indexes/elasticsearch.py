@@ -14,8 +14,10 @@ from tqdm import tqdm
 
 from medical_reasoning.indexes.base import Index
 from medical_reasoning.indexes.base import SearchResults
-from medical_reasoning.indexes.utils.elasticsearch import es_remove_index, es_create_index, \
-    es_ingest_bulk, es_search_bulk
+from medical_reasoning.indexes.utils.elasticsearch import es_create_index
+from medical_reasoning.indexes.utils.elasticsearch import es_ingest_bulk
+from medical_reasoning.indexes.utils.elasticsearch import es_remove_index
+from medical_reasoning.indexes.utils.elasticsearch import es_search_bulk
 
 
 def keep_only_alpha(s):
@@ -26,14 +28,14 @@ class ElasticsearchIndex(Index):
     _instance = None
 
     def __init__(
-            self,
-            *,
-            es_body: Optional[Dict[str, Any]] = None,
-            column_name: str = "text",
-            aux_weights: Optional[Dict[str, float]] = None,
-            filter_numbers: bool = False,
-            corpus_name: str = "",
-            **kwargs
+        self,
+        *,
+        es_body: Optional[Dict[str, Any]] = None,
+        column_name: str = "text",
+        aux_weights: Optional[Dict[str, float]] = None,
+        filter_numbers: bool = False,
+        corpus_name: str = "",
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self._instance = None
@@ -50,7 +52,9 @@ class ElasticsearchIndex(Index):
         # potentially create the index
         self.maybe_create_index(self.corpus, es_body)
 
-    def maybe_create_index(self, corpus: Dataset, es_body: Dict[str, Any], ingest_bs: int = 1000):
+    def maybe_create_index(
+        self, corpus: Dataset, es_body: Dict[str, Any], ingest_bs: int = 1000
+    ):
         if isinstance(es_body, DictConfig):
             es_body = OmegaConf.to_container(es_body)
         # maybe create the index
@@ -58,10 +62,10 @@ class ElasticsearchIndex(Index):
         if newly_created:
             try:
                 for i in tqdm(
-                        range(0, len(corpus), ingest_bs),
-                        desc=f"Indexing {self.index_name} with Elasticsearch",
+                    range(0, len(corpus), ingest_bs),
+                    desc=f"Indexing {self.index_name} with Elasticsearch",
                 ):
-                    batch = corpus[i: i + ingest_bs]
+                    batch = corpus[i : i + ingest_bs]
                     es_ingest_bulk(
                         self.instance,
                         self.index_name,
@@ -82,13 +86,15 @@ class ElasticsearchIndex(Index):
         return self._instance
 
     def __call__(
-            self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
+        self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
     ) -> SearchResults:
 
         if self.filter_numbers:
             queries = [self.filter_if_only_numbers(query) for query in queries]
             if aux_queries is not None:
-                aux_queries = [self.filter_if_only_numbers(query) for query in aux_queries]
+                aux_queries = [
+                    self.filter_if_only_numbers(query) for query in aux_queries
+                ]
 
         # retrieve the top k nearest examples
         output = es_search_bulk(

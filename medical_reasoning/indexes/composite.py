@@ -21,26 +21,24 @@ def flatten(x):
 
 class CompositeIndex(Index):
     def __init__(
-            self,
-            *,
-            p: int,
-            indexes: Dict[str, functools.partial],
-            weights: Dict[str, float],
-            **kwargs
+        self,
+        *,
+        p: int,
+        indexes: Dict[str, functools.partial],
+        weights: Dict[str, float],
+        **kwargs
     ):
         super().__init__(**kwargs, prepare_corpus=True)
         self.p = p
         assert set(indexes.keys()) == set(weights.keys())
         self.indexes = {
-            name: index_partial(
-                **self.base_args, prepare_corpus=False
-            )
+            name: index_partial(**self.base_args, prepare_corpus=False)
             for name, index_partial in indexes.items()
         }
         self.weights = weights
 
     def __call__(
-            self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
+        self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
     ) -> SearchResults:
         # query the index
         all_results = {

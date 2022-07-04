@@ -1,5 +1,8 @@
 from copy import copy
-from typing import Dict, List, Any, Iterator
+from typing import Any
+from typing import Dict
+from typing import Iterator
+from typing import List
 
 
 class GeneratePassages(object):
