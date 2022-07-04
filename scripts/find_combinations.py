@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Generator
 from typing import List
 
+import hydra
 import numpy as np
 import pandas as pd
 import rich
@@ -22,11 +23,9 @@ from loguru import logger
 from matplotlib import pyplot as plt
 from omegaconf import OmegaConf
 from tqdm import tqdm
-from pathlib import Path
-import hydra
 
 import medical_reasoning
-from medical_reasoning.run import make_info
+from medical_reasoning.run import make_info  # noqa: E501
 
 LIB_ROOT = Path(medical_reasoning.__file__).parent
 
@@ -38,6 +37,7 @@ ORDERING = [
     "Let's differentiate using step by step reasoning like a medical expert",
     "Let's derive the differential diagnosis step by step",
 ]
+
 
 def get_first(serie):
     x = serie.values[0]
@@ -261,6 +261,7 @@ def strategy2idx(summary: pd.DataFrame, strategy: str):
         raise ValueError(f"strategy {strategy} not matched (matches: {matches})")
     return matches[0]
 
+
 def run():
     global summary, cache_size
     # arguments
@@ -270,7 +271,9 @@ def run():
         "--metric", help="metric to maximize", default="accuracy+accuracy@2"
     )
     parser.add_argument("--perm_type", help="type of permutations", default="topn")
-    parser.add_argument("--filter_info", help="keep only run with info matching this", default=None)
+    parser.add_argument(
+        "--filter_info", help="keep only run with info matching this", default=None
+    )
     parser.add_argument(
         "--topn", help="number of top combinations to display", default=20, type=int
     )
@@ -306,7 +309,6 @@ def run():
     records = []
     glob_keys = ["strategy"]
     local_keys = ["labels", "predictions"]
-    lengths = []
     for exp in sorted(multirun_path.iterdir(), key=lambda x: x.name):
         if not exp.is_dir() or exp.name[0] == "_":
             continue
@@ -319,8 +321,6 @@ def run():
         exp_data["strategy"] = exp_data["strategy"].split("+")[0]
         if args.filter_info is not None and args.filter_info != cfg.info:
             continue
-        # if "prompt_style" in cfg.keys():
-        #     exp_data["strategy"] = f"{cfg['prompt_style']}-{exp_data['strategy']}"
 
         # infer the length
         n_tokens = []
@@ -402,7 +402,7 @@ def run():
                 else:
                     outputs = map(compute_metrics, permutations)
 
-                for output in (pbar := tqdm(outputs, total=total)):
+                for output in (pbar := tqdm(outputs, total=total)) :
                     queue += [output]
 
                     # store the queue
@@ -443,7 +443,7 @@ def run():
     with pd.option_context("max_colwidth", 1000):
         expert_data.to_latex(
             buf=multirun_path
-                / f"{base_path}experts-permutations-{args.max_perm}-{args.metric}.tex",
+            / f"{base_path}experts-permutations-{args.max_perm}-{args.metric}.tex",
             columns=["n_experts", *compute_metrics.metrics_names, "strategies"],
             formatters=formatters,
         )

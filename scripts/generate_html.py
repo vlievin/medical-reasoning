@@ -10,12 +10,12 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
-from omegaconf import OmegaConf
 
 import jinja2
 import rich
 import yaml
 from loguru import logger
+from omegaconf import OmegaConf
 
 from medical_reasoning.run import make_info
 
@@ -36,7 +36,9 @@ locator_re = re.compile(r"\[(\w+)_(\w+)-([\d\w+-]+)\]")
 formatted_dset = {"medqa_us": "USMLE", "pubmedqa": "PubMedQA-L", "medmcqa": "MedMCQA"}
 
 
-def load_data(data_dir: Path, filter_info: Optional[str]) -> (List[str], List[Dict[str, Any]]):
+def load_data(
+    data_dir: Path, filter_info: Optional[str]
+) -> (List[str], List[Dict[str, Any]]):
     # placeholders for the data + parameters
     answers = defaultdict(dict)
     questions = dict()
@@ -154,7 +156,9 @@ if __name__ == "__main__":
         description="Generate an html page to visualize the generated texts."
     )
     parser.add_argument("--path", help="path to the experiment data", required=True)
-    parser.add_argument("--filter_info", help="keep only run with info matching this", default=None)
+    parser.add_argument(
+        "--filter_info", help="keep only run with info matching this", default=None
+    )
     parser.add_argument("--fname", help="output file name", default="main.html")
     args = parser.parse_args()
     make_template(args)
