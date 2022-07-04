@@ -14,61 +14,64 @@ def es_search_bulk(
     *,
     index_name: str,
     queries: List[str],
-    title_queries: List[str],
-    title_boost: float = 1.0,
+    aux_queries: List[str],
+    aux_weights: Optional[Dict[str, float]] = None,
     k: int = 10,
 ):
     """Batch query an ElasticSearch Index"""
-    request = []
+    es_request = []
     for i, query in enumerate(queries):
-        should_query_part = []
-        if title_queries is not None:
-            query = query + " " + title_queries[i]
+        query_parts = []
 
         # this is the main query
-        should_query_part.append(
+        query_parts.append(
             {
                 "match": {
                     "text": {
                         "query": query,
-                        # "zero_terms_query": "all",
                         "operator": "or",
                     },
                 }
             },
         )
 
-        if title_queries is not None:
-            should_query_part.append(
-                {
-                    "match": {
-                        "title": {
-                            "query": title_queries[i],
-                            # "zero_terms_query": "all",
-                            "operator": "or",
-                            "boost": title_boost,
-                        },
-                    }
-                },
-            )
+        # these are the auxiliary queries
+        if aux_queries is not None:
+            if aux_weights is None:
+                raise ValueError(
+                    "aux_weights must be provided if aux_queries is not None"
+                )
 
-        # final request
-        r = {
+            for field, weight in aux_weights.items():
+                query_parts.append(
+                    {
+                        "match": {
+                            field: {
+                                "query": aux_queries[i],
+                                "operator": "or",
+                                "boost": weight,
+                            }
+                        }
+                    }
+                )
+
+        # make the final request
+        es_request_i = {
             "query": {
-                "bool": {"should": should_query_part},
+                "bool": {"should": query_parts},
             },
             "from": 0,
             "size": k,
         }
 
         # append the header and body of the request
-        request.extend([{"index": index_name}, r])
+        es_request.extend([{"index": index_name}, es_request_i])
 
-    result = es_instance.msearch(body=request, index=index_name, request_timeout=200)
+    result = es_instance.msearch(body=es_request, index=index_name, request_timeout=600)
 
-    titles, scores, contents = [], [], []
+    indices, titles, scores, contents = [], [], [], []
     for query in result["responses"]:
-        temp_titles, temp_scores, temp_content = [], [], []
+        temp_indices, temp_titles, temp_scores, temp_content = [], [], [], []
         if "hits" not in query:
             rich.print("[magenta]===== ES RESPONSE =====")
             rich.print(query)
@@ -77,17 +80,20 @@ def es_search_bulk(
 
         for hit in query["hits"]["hits"]:
             temp_scores.append(hit["_score"])
+            temp_indices.append(hit["_source"]["id"])
             temp_titles.append(hit["_source"]["title"])
             temp_content.append(hit["_source"]["text"])
 
+        indices.append(temp_indices)
         titles.append(temp_titles)
         scores.append(temp_scores)
         contents.append(temp_content)
 
     return {
-        "title": titles,
-        "score": scores,
-        "text": contents,
+        "indices": indices,
+        "titles": titles,
+        "scores": scores,
+        "texts": contents,
     }
 
 
@@ -124,6 +130,7 @@ def es_ingest_bulk(
     *,
     content: List[str],
     title: List[str],
+    idx: List[str],
     chunk_size=1000,
     request_timeout=200,
 ):
@@ -134,6 +141,7 @@ def es_ingest_bulk(
             "_source": {
                 "title": title[i],
                 "text": content[i],
+                "id": idx[i],
             },
         }
         for i in range(len(content))

@@ -1,0 +1,5 @@
+defaults:
+  - /model/template/reasoning@reasoning
+  - /model/template/extraction@extraction
+
+_target_: medical_reasoning.models.templates.auto_templates

@@ -1,0 +1,19 @@
+defaults:
+  - base
+  - /index/elasticsearch@indexes.es
+  - /index/dpr@indexes.dpr
+  - override corpus: wiki_dpr
+
+_target_: medical_reasoning.indexes.CompositeIndex
+p: 100
+passage_length: null
+passage_stride: null
+
+weights:
+  es: 1.0
+  dpr: 1.0
+indexes:
+  es:
+    _partial_: true
+  dpr:
+    _partial_: true

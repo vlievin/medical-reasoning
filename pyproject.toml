@@ -18,6 +18,10 @@ sklearn = "^0.0"
 elasticsearch = "~7"
 transformers = "^4.19.2"
 pydantic = "^1.9.1"
+python-slugify = "^6.1.2"
+click = "^8.1.3"
+torchmetrics = "^0.9.1"
+faiss-cpu = "^1.7.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "~3"
@@ -25,6 +29,10 @@ poethepoet = "^0.13.1"
 pre-commit = "^2.19.0"
 hydra-colorlog = "^1.2.0"
 parameterized = "^0.8.1"
+jupyter = "^1.0.0"
+seaborn = "^0.11.2"
+matplotlib = "^3.5.2"
+Jinja2 = "^3.1.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -37,8 +45,13 @@ experiment = "medical_reasoning.run:run"
 
 [tool.poe.tasks]
 format  = "pre-commit run --all-files"
+test = "python -m pytest"
 debug_exps = "experiment -m model=ada dataset=medqa_us,medmcqa dataset.subset=3 dataset.splits=test"
 subset_exps = "experiment -m model=davinci dataset=medmcqa,headqa,medqa_us dataset.subset=30 dataset.splits=test"
-subset_prompt_exps = "experiment -m model=davinci dataset=medmcqa,headqa,medqa_us,pubmedqa dataset.subset=20 dataset.splits=validation model.prompt_mode=chain_of_thought,zero_shot"
-test_identities = "experiment -m +flavor=subset model=ada,davinci model.prompt_mode=chain_of_thought model.template.identity=none,doctor,medical_expert"
-full_exps = "experiment -m model=davinci model.prompt_mode=zero_shot,chain_of_thought model.template.identity=medical_expert use_documents=false,true dataset=pubmedqa,medqa_us,medmcqa"
+strategies = "experiment -m dataset=medqa_us dataset.splits=validation dataset.subset=100 'strategy=glob(strat_*)' max_tokens=256 prompt_style=short"
+styles = "experiment -m dataset=medqa_us dataset.splits=validation dataset.subset=100 strategy=strat_4,strat_7 prompt_style=none,short,full"
+medqa_test = "experiment -m dataset=medqa_us dataset.splits=test model=davinci 'strategy=glob(strat__*)' prompt_style=short"
+pubmedqa_test = "experiment -m dataset=pubmedqa dataset.splits=test model=davinci 'strategy=glob(strat__*)' prompt_style=full n_docs=1"
+medmcqa_valid = "experiment -m dataset=medmcqa dataset.splits=validation dataset.subset=1000 model=davinci 'strategy=glob(strat__*)' prompt_style=full n_docs=0,1"
+find_combinations = "python -m scripts.find_combinations"
+generate_html = "python -m scripts.generate_html"
