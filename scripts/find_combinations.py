@@ -20,8 +20,24 @@ import transformers
 import yaml
 from loguru import logger
 from matplotlib import pyplot as plt
+from omegaconf import OmegaConf
 from tqdm import tqdm
+from pathlib import Path
+import hydra
 
+import medical_reasoning
+from medical_reasoning.run import make_info
+
+LIB_ROOT = Path(medical_reasoning.__file__).parent
+
+ORDERING = [
+    "--",
+    "Let's think step by step",
+    "Let's think step by step like a medical expert",
+    "Let's use step by step inductive reasoning, given the medical nature of the question",
+    "Let's differentiate using step by step reasoning like a medical expert",
+    "Let's derive the differential diagnosis step by step",
+]
 
 def get_first(serie):
     x = serie.values[0]
@@ -245,18 +261,16 @@ def strategy2idx(summary: pd.DataFrame, strategy: str):
         raise ValueError(f"strategy {strategy} not matched (matches: {matches})")
     return matches[0]
 
-
-if __name__ == "__main__":
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
+def run():
+    global summary, cache_size
     # arguments
     parser = argparse.ArgumentParser(description="Description of your program")
     parser.add_argument("--path", help="path to the experiment data", required=True)
     parser.add_argument(
         "--metric", help="metric to maximize", default="accuracy+accuracy@2"
     )
-
     parser.add_argument("--perm_type", help="type of permutations", default="topn")
+    parser.add_argument("--filter_info", help="keep only run with info matching this", default=None)
     parser.add_argument(
         "--topn", help="number of top combinations to display", default=20, type=int
     )
@@ -287,14 +301,12 @@ if __name__ == "__main__":
         f"max. permutations={args.max_perm}, metric={metrics}"
     )
     tokenizer = transformers.GPT2TokenizerFast.from_pretrained("gpt2")
-
     # placeholders for the data + parameters
     summary = []
     records = []
     glob_keys = ["strategy"]
     local_keys = ["labels", "predictions"]
     lengths = []
-
     for exp in sorted(multirun_path.iterdir(), key=lambda x: x.name):
         if not exp.is_dir() or exp.name[0] == "_":
             continue
@@ -303,8 +315,10 @@ if __name__ == "__main__":
         if not data_file.exists() or not config_file.exists():
             continue
         exp_data = json.load(open(data_file, "r"))
-        cfg = yaml.safe_load(open(config_file, "r"))
+        cfg = OmegaConf.load(config_file)
         exp_data["strategy"] = exp_data["strategy"].split("+")[0]
+        if args.filter_info is not None and args.filter_info != cfg.info:
+            continue
         # if "prompt_style" in cfg.keys():
         #     exp_data["strategy"] = f"{cfg['prompt_style']}-{exp_data['strategy']}"
 
@@ -329,21 +343,19 @@ if __name__ == "__main__":
             record.update({k: v for k, v in exp_data.items() if k in glob_keys})
             record["qid"] = qid
             records.append(record)
-
     summary = pd.DataFrame(summary)
     if args.sort_summary:
         summary = summary.sort_values(main_metric, ascending=False)
     summary = summary.reset_index(drop=True)
     # summary.index += 1
     records = pd.DataFrame(records)
-
     # plot the agreement matrix
     plot_agreement_matrix(summary, args.path)
-
     # save the summary
+    base_path = f"{args.filter_info}-" if args.filter_info is not None else ""
     with pd.option_context("max_colwidth", 1000):
         summary.to_latex(
-            buf=multirun_path / "summary.tex",
+            buf=multirun_path / f"{base_path}summary.tex",
             columns=["strategy", "accuracy", "f1", "n_tokens"],
             float_format="%.2f",
             formatters=formatters,
@@ -354,7 +366,6 @@ if __name__ == "__main__":
             ["engine", "strategy", "n_samples", "split", "accuracy", "f1", "n_tokens"]
         ]
     )
-
     # retrieve the indices:
     with mp.Pool(processes=args.num_proc) as pool:
         expert_data = []
@@ -391,7 +402,7 @@ if __name__ == "__main__":
                 else:
                     outputs = map(compute_metrics, permutations)
 
-                for output in (pbar := tqdm(outputs, total=total)) :
+                for output in (pbar := tqdm(outputs, total=total)):
                     queue += [output]
 
                     # store the queue
@@ -421,7 +432,6 @@ if __name__ == "__main__":
 
             except KeyboardInterrupt:
                 pass
-
     # write to file
     expert_data = pd.DataFrame(expert_data)
     expert_data = expert_data.sort_values(metrics, ascending=False)[: args.topn]
@@ -433,12 +443,16 @@ if __name__ == "__main__":
     with pd.option_context("max_colwidth", 1000):
         expert_data.to_latex(
             buf=multirun_path
-            / f"experts-permutations-{args.max_perm}-{args.metric}.tex",
+                / f"{base_path}experts-permutations-{args.max_perm}-{args.metric}.tex",
             columns=["n_experts", *compute_metrics.metrics_names, "strategies"],
             formatters=formatters,
         )
-
     logger.info(f"Best strategies - {main_metric}: {max_score:.2%})")
     for i, strat in enumerate(best_output["strategies"]):
         logger.info(f" - {i}: {strat}")
     rich.print(expert_data)
+
+
+if __name__ == "__main__":
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    run()

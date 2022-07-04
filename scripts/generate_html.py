@@ -9,11 +9,15 @@ from pathlib import Path
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Optional
+from omegaconf import OmegaConf
 
 import jinja2
 import rich
 import yaml
 from loguru import logger
+
+from medical_reasoning.run import make_info
 
 SEP = 80 * "." + "\n"
 ANS_DEL = {"short": "\n\nA: ", "full": "\n\nAnswer: "}
@@ -32,7 +36,7 @@ locator_re = re.compile(r"\[(\w+)_(\w+)-([\d\w+-]+)\]")
 formatted_dset = {"medqa_us": "USMLE", "pubmedqa": "PubMedQA-L", "medmcqa": "MedMCQA"}
 
 
-def load_data(data_dir: Path) -> (List[str], List[Dict[str, Any]]):
+def load_data(data_dir: Path, filter_info: Optional[str]) -> (List[str], List[Dict[str, Any]]):
     # placeholders for the data + parameters
     answers = defaultdict(dict)
     questions = dict()
@@ -42,11 +46,12 @@ def load_data(data_dir: Path) -> (List[str], List[Dict[str, Any]]):
         try:
             # data_file = exp / "data.json"
             config_file = exp / "config.yaml"
-            # exp_data = json.load(open(data_file, "r"))
-            cfg = yaml.safe_load(open(config_file, "r"))
+            cfg = OmegaConf.load(config_file)
             strategy = cfg["strategy"]["prompt"]
             strategy = strategy.replace("Let’s", "Let's")
             ans_del = ANS_DEL[cfg["prompt_style"]]
+            if args.filter_info is not None and args.filter_info != cfg.info:
+                continue
             for record in (exp / "output").iterdir():
                 if not record.name.endswith(".txt"):
                     continue
@@ -118,7 +123,7 @@ def make_template(args):
     logger.info(f"Reading data from {data_dir}")
 
     # load the data
-    strategies, data = load_data(data_dir)
+    strategies, data = load_data(data_dir, args.filter_info)
 
     # load the Jinja2 template
     template = load_template("showcase.html")
@@ -149,6 +154,7 @@ if __name__ == "__main__":
         description="Generate an html page to visualize the generated texts."
     )
     parser.add_argument("--path", help="path to the experiment data", required=True)
+    parser.add_argument("--filter_info", help="keep only run with info matching this", default=None)
     parser.add_argument("--fname", help="output file name", default="main.html")
     args = parser.parse_args()
     make_template(args)
