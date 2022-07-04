@@ -4,7 +4,7 @@ defaults:
 
 _target_: medical_reasoning.indexes.ElasticsearchIndex
 column_name: text
-filter_numbers: True
+filter_numbers: False
 corpus_name: ${index.corpus.path}-${index.corpus.name}
 aux_weights:
   text: 1.0

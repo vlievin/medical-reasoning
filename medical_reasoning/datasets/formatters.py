@@ -117,11 +117,11 @@ class MedMCQAFormatter(Formatter):
             desc="Cleaning up reasoning",
             num_proc=4,
         )
-        dataset = dataset.map(
-            MedMCQAExtractContext(),
-            desc="Append context to question",
-            num_proc=4,
-        )
+        # dataset = dataset.map(
+        #     MedMCQAExtractContext(),
+        #     desc="Append context to question",
+        #     num_proc=4,
+        # )
         return dataset
 
 

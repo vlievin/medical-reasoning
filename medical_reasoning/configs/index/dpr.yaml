@@ -2,5 +2,4 @@ defaults:
   - base
 
 _target_: medical_reasoning.indexes.DprIndex
-
 hf_model: facebook/dpr-question_encoder-single-nq-base

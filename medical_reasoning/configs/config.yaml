@@ -23,7 +23,7 @@ permute_options: false
 n_samples: 1
 temperature: 0
 max_tokens: 1024
-num_workers: 1
+num_workers: 4
 num_proc: 8
 info: ${make_info:${prompt_style},${permute_options},${n_docs},${shots}}
 
