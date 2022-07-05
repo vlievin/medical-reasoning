@@ -1,4 +1,6 @@
-## Sample Chain-of-Thoughts
+## Chain-of-Thought Samples
+
+### 1. Test Samples
 
 6 prompts, full test set (USMLE, PubMedQA), 1k validation samples (MedMCQA)
 
@@ -7,7 +9,7 @@
 - [MedMCQA with context](samples/medmcqa-w-context.html)
 - [PubMedQA](samples/pubmedqa.html)
 
-# Validation samples
+### 2. Prompt validation samples
 
 30 prompts, 100 questions
 
