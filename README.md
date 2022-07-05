@@ -1,5 +1,3 @@
-# Medical Reasoning using GPT-3
-
 ## Setup
 
 <details>
