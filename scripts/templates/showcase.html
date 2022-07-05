@@ -1,6 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>Can large language models reasoning about medical questions?</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         * {
@@ -9,7 +11,6 @@
         }
 
         #myInput {
-            background-image: url('/css/searchicon.png');
             background-position: 10px 10px;
             background-repeat: no-repeat;
             width: 100%;
@@ -28,7 +29,11 @@
 
         #myTable th {
             text-align: center;
+            position: sticky;
+            top: 0;
             padding: 18px;
+            background-color: #333;
+            color: #ddd;
         }
 
         #myTable td {
@@ -48,65 +53,174 @@
         #myTable tr.header, #myTable tr:hover {
             background-color: #f1f1f1;
         }
+
+        .container {
+            position: relative;
+        }
+
+        .container__menu {
+            /* Absolute position */
+            position: absolute;
+
+            /* Reset */
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+
+            /* Misc */
+            background-color: #f7fafc;
+            border: 1px solid #cbd5e0;
+            border-radius: 0.25rem;
+            padding: 0.5rem;
+        }
+
+        .container__menu--hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
 
 <h1>{{ title }}</h1>
 
-<input type="text" id="myInput" onkeyup="filterRows()" placeholder="Filter the questions.."
-       title="Search the questions..">
+<!--<input type="text" id="myInput" onkeyup="filterRows()" placeholder="Filter the questions.."-->
+<!--       title="Search the questions..">-->
 
-
-<table id="myTable">
-    <tr class="header">
-        {% for strategy in strategies %}
-        <th>{{ strategy }}</th>
+<div class="container">
+    <table id="myTable" class="myTable">
+        <thead>
+        <tr class="header">
+            {% for strategy in strategies %}
+            <th>{{ strategy }}
+            </th>
+            {% endfor %}
+        </tr>
+        </thead>
+        <tbody>
+        {% for row in data %}
+        <tr data-qid={{ row.question.qid }}>
+            <td colspan="{{ ncols }}"><strong>{{ row.question.dataset }}
+                [{{row.question.split}}:{{row.question.idx}}]</strong> {{ row.question.content }}
+            </td>
+        </tr>
+        <tr data-qid={{ row.question.qid }}>
+            {% for answer in row.answers %}
+            <td>{{ answer }}</td>
+            {% endfor %}
+        </tr>
         {% endfor %}
-    </tr>
-    {% for row in data %}
-    <tr data-qid={{ row.question.qid }}>
-        <td colspan="{{ ncols }}"><strong>{{ row.question.dataset }} [{{row.question.split}}:{{row.question.idx}}]</strong> {{ row.question.content }}</td>
-    </tr>
-    <tr data-qid={{ row.question.qid }}>
-        {% for answer in row.answers %}
-        <td>{{ answer }}</td>
-        {% endfor %}
-    </tr>
-    {% endfor %}
-</table>
+        </tbody>
+    </table>
+    <ul id="menu" class="container__menu container__menu--hidden"></ul>
+</div>
 
 <script>
-    function filterRows() {
-        var input, filter, table, tr, td, tds, i, j, qid_i, txtValue;
-        let visible = [];
-        input = document.getElementById("myInput");
-        filter = input.value.toUpperCase();
-        table = document.getElementById("myTable");
-        tr = table.getElementsByTagName("tr");
+    document.addEventListener('DOMContentLoaded', function () {
+        const menu = document.getElementById('menu');
+        const table = document.getElementById('myTable');
+        const headers = [].slice.call(table.querySelectorAll('th'));
+        const cells = [].slice.call(table.querySelectorAll('th, td'));
+        const numColumns = headers.length;
 
-        for (i = 0; i < tr.length; i++) {
-            tds = tr[i].getElementsByTagName("td");
-            for (j = 0; j < tds.length; j++) {
-                td = tds[j];
-                if (td) {
-                    txtValue = td.textContent || td.innerText;
-                    if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                        visible.push(tr[i].getAttribute("data-qid"));
-                    }
-                }
-            }
-        }
+        const thead = table.querySelector('thead');
+        thead.addEventListener('contextmenu', function (e) {
+            e.preventDefault();
 
-        for (i = 0; i < tr.length; i++) {
-            qid_i = tr[i].getAttribute("data-qid");
-            if (visible.includes(qid_i)) {
-                tr[i].style.display = "";
-            } else {
-                tr[i].style.display = "none";
+            const rect = thead.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            menu.style.top = `${y}px`;
+            menu.style.left = `${x}px`;
+            menu.classList.toggle('container__menu--hidden');
+
+            document.addEventListener('click', documentClickHandler);
+        });
+
+        // Hide the menu when clicking outside of it
+        const documentClickHandler = function (e) {
+            const isClickedOutside = !menu.contains(e.target);
+            if (isClickedOutside) {
+                menu.classList.add('container__menu--hidden');
+                document.removeEventListener('click', documentClickHandler);
             }
-        }
-    }
+        };
+
+        const showColumn = function (index) {
+            cells
+                .filter(function (cell) {
+                    return cell.getAttribute('data-column-index') === `${index}`;
+                })
+                .forEach(function (cell) {
+                    cell.style.display = '';
+                    cell.setAttribute('data-shown', 'true');
+                });
+
+            menu.querySelectorAll(`[type="checkbox"][disabled]`).forEach(function (checkbox) {
+                checkbox.removeAttribute('disabled');
+            });
+        };
+
+        const hideColumn = function (index) {
+            cells
+                .filter(function (cell) {
+                    return cell.getAttribute('data-column-index') === `${index}`;
+                })
+                .forEach(function (cell) {
+                    cell.style.display = 'none';
+                    cell.setAttribute('data-shown', 'false');
+                });
+            // How many columns are hidden
+            const numHiddenCols = headers.filter(function (th) {
+                return th.getAttribute('data-shown') === 'false';
+            }).length;
+            if (numHiddenCols === numColumns - 1) {
+                // There's only one column which isn't hidden yet
+                // We don't allow user to hide it
+                const shownColumnIndex = thead
+                    .querySelector('[data-shown="true"]')
+                    .getAttribute('data-column-index');
+
+                const checkbox = menu.querySelector(
+                    `[type="checkbox"][data-column-index="${shownColumnIndex}"]`
+                );
+                checkbox.setAttribute('disabled', 'true');
+            }
+        };
+
+        cells.forEach(function (cell, index) {
+            cell.setAttribute('data-column-index', index % numColumns);
+            cell.setAttribute('data-shown', 'true');
+        });
+
+        headers.forEach(function (th, index) {
+            // Build the menu item
+            const li = document.createElement('li');
+            const label = document.createElement('label');
+            const checkbox = document.createElement('input');
+            checkbox.setAttribute('type', 'checkbox');
+            checkbox.setAttribute('checked', 'true');
+            checkbox.setAttribute('data-column-index', index);
+            checkbox.style.marginRight = '.25rem';
+
+            const text = document.createTextNode(th.textContent);
+
+            label.appendChild(checkbox);
+            label.appendChild(text);
+            label.style.display = 'flex';
+            label.style.alignItems = 'center';
+            li.appendChild(label);
+            menu.appendChild(li);
+
+            // Handle the event
+            checkbox.addEventListener('change', function (e) {
+                e.target.checked ? showColumn(index) : hideColumn(index);
+                menu.classList.add('container__menu--hidden');
+            });
+        });
+    });
+
+
 </script>
 
 </body>
