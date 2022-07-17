@@ -1,7 +1,6 @@
 #! /usr/bin/python
 import argparse
 import hashlib
-import json
 import math
 import re
 from collections import defaultdict
@@ -13,14 +12,14 @@ from typing import Optional
 
 import jinja2
 import rich
-import yaml
 from loguru import logger
 from omegaconf import OmegaConf
+from medical_reasoning.run import make_info  # type: ignore
 
-from medical_reasoning.run import make_info
-
-SEP = 80 * "." + "\n"
+SEP = 80 * "-" + "\n\n"
+FLOW_SEP = 80 * "." + "\n"
 ANS_DEL = {"short": "\n\nA: ", "full": "\n\nAnswer: "}
+Q_DEL = {"short": "\n\nQ: ", "full": "\n\nQuestion: "}
 
 ORDERING = [
     "--",
@@ -37,7 +36,7 @@ formatted_dset = {"medqa_us": "USMLE", "pubmedqa": "PubMedQA-L", "medmcqa": "Med
 
 
 def load_data(
-    data_dir: Path, filter_info: Optional[str]
+        data_dir: Path, filter_info: Optional[str]
 ) -> (List[str], List[Dict[str, Any]]):
     # placeholders for the data + parameters
     answers = defaultdict(dict)
@@ -52,7 +51,9 @@ def load_data(
             strategy = cfg["strategy"]["prompt"]
             strategy = strategy.replace("Let’s", "Let's")
             ans_del = ANS_DEL[cfg["prompt_style"]]
+            q_del = Q_DEL[cfg["prompt_style"]]
             if args.filter_info is not None and args.filter_info != cfg.info:
+                logger.info(f"Skipping ({cfg.info}): {exp}")
                 continue
             for record in (exp / "output").iterdir():
                 if not record.name.endswith(".txt"):
@@ -63,29 +64,33 @@ def load_data(
                 match = locator_re.search(content)
                 dset, split, idx = match.groups()
                 dset = formatted_dset[dset]
-                content = content.split(SEP)
-                flow = content[-1]
+                content_parts = content.split(SEP)
+                is_correct = content_parts[0].split(" ")[-1].replace("\n", "")
+                is_correct = {"correct": True, "incorrect": False}[is_correct]
+                ground_truth, answer_pred, *_ = content_parts[1].split("\n")
+                ground_truth = ground_truth.replace("Answer: ", "")
+                # answer_pred = answer_pred.replace("Prediction: ", "")
+
+                flow = content.split(FLOW_SEP)[-1]
                 try:
-                    question, answer, *_ = flow.split(ans_del)
+                    flow_parts = flow.split(ans_del)
+                    answer = ans_del.replace("\n", "") + flow_parts[-1]
+                    question = ans_del.join(flow_parts[:-1])
+                    # split questions
+                    question_parts = question.split(q_del)
+                    if len(question_parts) > 1:
+                        question = f"<small><i>{q_del.join(question_parts[:-1])}</small></i>{q_del}{question_parts[-1]}"
                 except Exception as exc:
                     rich.print(len(flow.split(ans_del)))
                     logger.error(exc)
 
                 # parse the ground truth and the pred
-                ground_truth = [
-                    c for c in content[0].split("\n") if c.startswith("Answer: ")
-                ][0]
-                ground_truth = ground_truth.replace("Answer: ", "").replace(":", ")")
-                pred = [
-                    c for c in content[0].split("\n") if c.startswith("Prediction: ")
-                ][0]
-                pred = pred.replace("Prediction: ", "").replace(":", ")")
-                is_correct = pred == ground_truth
                 outcome = "&#9989; " if is_correct else "&#10060; "
 
                 # emphasis the right answer
+                formatted_ground_truth = ground_truth.replace(': ', ') ')
                 question = question.replace(
-                    ground_truth, rf"<strong>{ground_truth}</strong>"
+                    formatted_ground_truth, rf"<strong>{formatted_ground_truth}</strong>"
                 )
 
                 # store

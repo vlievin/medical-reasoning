@@ -66,7 +66,8 @@
     </tr>
     {% for row in data %}
     <tr data-qid={{ row.question.qid }}>
-        <td colspan="{{ ncols }}"><strong>{{ row.question.dataset }} [{{row.question.split}}:{{row.question.idx}}]</strong> {{ row.question.content }}</td>
+        <td colspan="{{ ncols }}"><strong>{{ row.question.dataset }} [{{row.question.split}}:{{row.question.idx}}]</strong>
+            {{ row.question.content }}</td>
     </tr>
     <tr data-qid={{ row.question.qid }}>
         {% for answer in row.answers %}

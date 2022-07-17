@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Generator
 from typing import List
 
-import hydra
 import numpy as np
 import pandas as pd
 import rich
@@ -18,14 +17,13 @@ import seaborn as sns
 import torch
 import torchmetrics
 import transformers
-import yaml
 from loguru import logger
 from matplotlib import pyplot as plt
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
 import medical_reasoning
-from medical_reasoning.run import make_info  # noqa: E501
+from medical_reasoning.run import make_info  # type: ignore
 
 LIB_ROOT = Path(medical_reasoning.__file__).parent
 
@@ -84,7 +82,7 @@ formatters = {
 
 class ComputeMetrics(object):
     def __init__(
-        self, records: pd.DataFrame, n_options=4, eps: float = 1e-1, noise_scale=1e-5
+            self, records: pd.DataFrame, n_options=4, eps: float = 1e-1, noise_scale=1e-5
     ):
         self.records = records
         self.n_options = n_options
@@ -319,7 +317,9 @@ def run():
         exp_data = json.load(open(data_file, "r"))
         cfg = OmegaConf.load(config_file)
         exp_data["strategy"] = exp_data["strategy"].split("+")[0]
-        if args.filter_info is not None and args.filter_info != cfg.info:
+        if args.filter_info is not None and args.filter_info == "_append_":
+            exp_data["strategy"] += f"+{cfg.info}"
+        elif args.filter_info is not None and args.filter_info != cfg.info:
             continue
 
         # infer the length
@@ -402,7 +402,7 @@ def run():
                 else:
                     outputs = map(compute_metrics, permutations)
 
-                for output in (pbar := tqdm(outputs, total=total)) :
+                for output in (pbar := tqdm(outputs, total=total)):
                     queue += [output]
 
                     # store the queue
@@ -443,7 +443,7 @@ def run():
     with pd.option_context("max_colwidth", 1000):
         expert_data.to_latex(
             buf=multirun_path
-            / f"{base_path}experts-permutations-{args.max_perm}-{args.metric}.tex",
+                / f"{base_path}experts-permutations-{args.max_perm}-{args.metric}.tex",
             columns=["n_experts", *compute_metrics.metrics_names, "strategies"],
             formatters=formatters,
         )

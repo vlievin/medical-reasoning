@@ -33,6 +33,7 @@ class Preprocessing(TorchDataset):
         option_symbols: List[str],
         use_index: bool,
         permute_options: bool = False,
+        strip_reasoning: bool = False,
     ):
         # store the attributes
         self.dataset = dataset
@@ -41,6 +42,7 @@ class Preprocessing(TorchDataset):
         self.use_index = use_index
         self._is_instantiated = False
         self.permute_options = permute_options
+        self.strip_reasoning = strip_reasoning
 
     def __getitem__(self, item) -> Tuple[int, Example, List[Example]]:
         # dynamically instantiate the dataset if not yet done
@@ -119,6 +121,9 @@ class Preprocessing(TorchDataset):
         seed: int,
     ) -> Example:
         """Make an example from a row of data. Potentially sample the index."""
+        if self.strip_reasoning:
+            row = row.copy()
+            row["reasoning"] = None
         eg = Example(**row, option_symbols=option_symbols)
 
         # potentially permute

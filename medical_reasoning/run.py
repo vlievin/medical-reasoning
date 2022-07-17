@@ -37,7 +37,7 @@ from medical_reasoning.utils.preprocessing import Preprocessing
 SEPARATOR = "-" * 80 + "\n"
 
 
-def make_info(prompt_style, permute_options, n_docs, shots):
+def make_info(prompt_style, permute_options, n_docs, shots, strip_reasoning):
     info_name = prompt_style
 
     if bool(permute_options):
@@ -48,6 +48,9 @@ def make_info(prompt_style, permute_options, n_docs, shots):
 
     if int(shots) > 0:
         info_name += f"-{shots}shots"
+
+    if bool(strip_reasoning):
+        info_name += "-strip-reasoning"
 
     return info_name
 
@@ -117,6 +120,7 @@ def run(config: DictConfig) -> None:
             option_symbols=option_symbols,
             use_index=use_index,
             permute_options=config.permute_options,
+            strip_reasoning=config.strip_reasoning,
         )
         for split in dataset.keys()
     }

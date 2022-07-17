@@ -62,7 +62,6 @@ class AnswerChoicesFormat:
 class PromptTemplate(object):
     name = "prompt"
     SEP = "\n\n"
-    can_be_simulated = True
     _completion_config = {}
 
     def __init__(self, *, style: str = "full"):
@@ -92,6 +91,9 @@ class PromptTemplate(object):
     @abc.abstractmethod
     def simulate_completion(self, eg: Example, **kargs) -> str:
         raise NotImplementedError()
+
+    def can_be_simulated(self, eg: Example) -> bool:
+        return False
 
     @abc.abstractmethod
     def infer_answer(
@@ -228,6 +230,8 @@ class MultipleChoiceTemplate(PromptTemplate):
     def simulate_completion(self, eg: Example) -> str:
         return f" {eg.answer_symbol}) {eg.answer}."
 
+    def can_be_simulated(self, eg: Example) -> bool:
+        return True
 
 class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
     name = "reasoning_prompt"
@@ -268,6 +272,9 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
     def simulate_completion(self, eg: Example) -> str:
         return f"\n{eg.reasoning}"
 
+    def can_be_simulated(self, eg: Example) -> bool:
+        return eg.reasoning is not None and len(eg.reasoning) > 0
+
     def __repr__(self):
         return f'{type(self).__name__}("{self.strategy}")'
 
@@ -304,7 +311,6 @@ class ExtractionMultipleChoiceTemplate(MultipleChoiceTemplate):
 
 class UncertaintyTemplate(PromptTemplate):
     name = "uncertainty_prompt"
-    can_be_simulated = False
     _completion_config = {"max_tokens": 32, "n": 1}
 
     def __call__(self, eg: Example) -> str:
