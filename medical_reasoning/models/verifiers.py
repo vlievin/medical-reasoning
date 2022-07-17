@@ -32,17 +32,21 @@ class MajorityVotingVerifier(Verifier):
         meta["answer_frequencies"] = freqs
 
         # compute the probabilities
-        probs = np.zeros((len(eg.allowed_options),))
+        probs = np.zeros((len(eg.option_symbols),))
         for a in answer_candidates:
-            i = eg.allowed_options.index(a)
+            if a is None:
+                i = np.random.randint(0, len(eg.option_symbols))
+            else:
+                i = eg.option_symbols.index(a)
             probs[i] += 1
 
         probs /= len(answer_candidates)
 
         # return
         pred_str = freqs.most_common(1)[0][0]
-        return Prediction(prediction_str=pred_str,
-                          example=eg,
-                          meta=meta,
-                          probs=probs.tolist(),
-                          )
+        return Prediction(
+            prediction_str=pred_str,
+            example=eg,
+            meta=meta,
+            probs=probs.tolist(),
+        )

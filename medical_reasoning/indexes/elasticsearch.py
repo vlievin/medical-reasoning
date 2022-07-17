@@ -1,114 +1,69 @@
 from __future__ import annotations
 
-import json
-from copy import copy
 from typing import Any
 from typing import Dict
-from typing import Iterator
 from typing import List
 from typing import Optional
 
-import datasets
-import rich
-from datasets import DatasetDict
+from datasets import Dataset
 from elasticsearch import Elasticsearch
-from hydra.utils import instantiate
 from loguru import logger
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
+from medical_reasoning.indexes.base import Index
+from medical_reasoning.indexes.base import SearchResults
 from medical_reasoning.indexes.utils.elasticsearch import es_create_index
 from medical_reasoning.indexes.utils.elasticsearch import es_ingest_bulk
 from medical_reasoning.indexes.utils.elasticsearch import es_remove_index
 from medical_reasoning.indexes.utils.elasticsearch import es_search_bulk
 
 
-class GeneratePassages(object):
-    def __init__(
-        self,
-        content_key: str = "text",
-        passage_length: int = 100,
-        passage_stride: int = 50,
-    ):
-        self.content_key = content_key
-        self.passage_length = passage_length
-        self.passage_stride = passage_stride
-
-    def __call__(self, batch: Dict[str, List[Any]], **kwargs) -> Dict[str, List[Any]]:
-        keys = list(batch.keys())
-        batch_size = len(batch["text"])
-        documents = [
-            {key: batch[key][i] for key in batch.keys()} for i in range(batch_size)
-        ]
-        passages = [
-            passage
-            for document in documents
-            for passage in self.yield_passages(document)
-        ]
-
-        return {key: [passage[key] for passage in passages] for key in keys}
-
-    def yield_passages(self, document: Dict[str, Any]) -> Iterator[Dict[str, Any]]:
-        content = document[self.content_key]
-        content_words = content.split()
-        content_length = len(content_words)
-        for i in range(0, content_length - self.passage_length, self.passage_stride):
-            passage = copy(document)
-            passage.pop(self.content_key)
-            passage_content = content_words[i : i + self.passage_length]
-            if i > 0:
-                passage_content = ["..."] + passage_content
-            if i + self.passage_length < content_length:
-                passage_content = passage_content + ["..."]
-            passage[self.content_key] = " ".join(passage_content)
-            yield passage
+def keep_only_alpha(s):
+    return "".join(filter(str.isalpha, s))
 
 
-class ElasticsearchIndex(object):
+class ElasticsearchIndex(Index):
     _instance = None
 
     def __init__(
         self,
         *,
-        corpus: DictConfig | DatasetDict,
-        subset: Optional[int] = None,
-        ingest_bs: int = 10_000,
-        num_proc: int = 4,
-        title_boost_weight: float = 1.0,
-        passage_length: int = 100,
-        passage_stride: int = 50,
         es_body: Optional[Dict[str, Any]] = None,
+        column_name: str = "text",
+        aux_weights: Optional[Dict[str, float]] = None,
+        filter_numbers: bool = False,
+        corpus_name: str = "",
+        **kwargs,
     ):
-        self.title_boost_weight = title_boost_weight
-        # process the dataset
-        if isinstance(corpus, DictConfig):
-            corpus: DatasetDict = instantiate(corpus)
-        corpus = datasets.concatenate_datasets(list(corpus.values()))
-        if subset is not None:
-            corpus = corpus.select(list(range(subset)))
-            corpus._fingerprint = f"{corpus._fingerprint}-s{subset}"
-        # generate passages
-        pipe = GeneratePassages(
-            passage_length=passage_length, passage_stride=passage_stride
-        )
-        corpus = corpus.map(
-            pipe,
-            batched=True,
-            num_proc=num_proc,
-            desc="Generating passages",
-            batch_size=10,
-        )
+        super().__init__(**kwargs)
+        self._instance = None
+        self.column_name = column_name
+        self.filter_numbers = filter_numbers
+        self.aux_weights = aux_weights
+
         # define the index name
-        es_body = OmegaConf.to_container(es_body)
-        self.index_name = f"wikipedia-20220301.en-{corpus._fingerprint}"
+        dset_name = corpus_name
+        fingerprint = self.corpus._fingerprint
+        index_name = f"{dset_name}_{fingerprint}"
+        self.index_name = index_name.lower()
+
+        # potentially create the index
+        self.maybe_create_index(self.corpus, es_body)
+
+    def maybe_create_index(
+        self, corpus: Dataset, es_body: Dict[str, Any], ingest_bs: int = 1000
+    ):
+        if isinstance(es_body, DictConfig):
+            es_body = OmegaConf.to_container(es_body)
         # maybe create the index
         newly_created = es_create_index(self.instance, self.index_name, body=es_body)
         if newly_created:
             try:
                 for i in tqdm(
                     range(0, len(corpus), ingest_bs),
-                    desc=f"Indexing {corpus._fingerprint} with Elasticsearch",
+                    desc=f"Indexing {self.index_name} with Elasticsearch",
                 ):
                     batch = corpus[i : i + ingest_bs]
                     es_ingest_bulk(
@@ -116,6 +71,7 @@ class ElasticsearchIndex(object):
                         self.index_name,
                         content=batch["text"],
                         title=batch["title"],
+                        idx=batch["id"],
                     )
             except Exception as exc:
                 es_remove_index(self.instance, self.index_name)
@@ -129,12 +85,32 @@ class ElasticsearchIndex(object):
             self._instance = Elasticsearch()
         return self._instance
 
-    def __call__(self, queries: List[str], query_titles: List[str], k: int = 10):
-        return es_search_bulk(
+    def __call__(
+        self, queries: List[str], aux_queries: Optional[List[str]], *, k: int = 10
+    ) -> SearchResults:
+
+        if self.filter_numbers:
+            queries = [self.filter_if_only_numbers(query) for query in queries]
+            if aux_queries is not None:
+                aux_queries = [
+                    self.filter_if_only_numbers(query) for query in aux_queries
+                ]
+
+        # retrieve the top k nearest examples
+        output = es_search_bulk(
             self.instance,
             index_name=self.index_name,
             queries=queries,
-            title_queries=query_titles,
-            title_boost=self.title_boost_weight,
+            aux_queries=aux_queries,
+            aux_weights=self.aux_weights,
             k=k,
         )
+
+        return SearchResults(**output)
+
+    def filter_if_only_numbers(self, query):
+        only_alpha = keep_only_alpha(query)
+        if len(only_alpha) == 0:
+            return ""
+        else:
+            return query

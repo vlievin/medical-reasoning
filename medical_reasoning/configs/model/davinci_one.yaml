@@ -1,0 +1,5 @@
+defaults:
+  - base
+
+engine: text-davinci-001
+price: 0.0600

@@ -3,7 +3,7 @@
 defaults:
   - _self_
   - dataset: medqa_us
-  - strategy: strat_7
+  - strategy: strat__4
   - tokenizer: gpt2
   - index: elasticsearch
   - model: ada
@@ -15,10 +15,18 @@ defaults:
   - override hydra/job_logging: colorlog
 
 
-exp_id: ${dataset.name}-${model.engine}-${len:${model.templates}}steps-${n_docs}doc-${shots}shots-${shorten:${strategy.prompt},32}
-prompt_style: short
+exp_id: ${dataset.name}-${model.engine}-${len:${model.templates}}steps-${info}-${shorten:${strategy.prompt},32}
+prompt_style: full
 n_docs: 0
 shots: 0
+permute_options: false
+strip_reasoning: false
+n_samples: 1
+temperature: 0
+max_tokens: 1024
+num_workers: 1
+num_proc: 8
+info: ${make_info:${prompt_style},${permute_options},${n_docs},${shots},${strip_reasoning}}
 
 # technicals
 print_config: true

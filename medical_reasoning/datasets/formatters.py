@@ -6,8 +6,6 @@ from datasets import Dataset
 from datasets import DatasetDict
 from datasets import Split
 
-from medical_reasoning.datasets.utils.split_pubmed import split_pubmed
-
 # https://regex101.com/r/9YNTyr/1
 medmcqa_ans_pattern = re.compile(
     (
@@ -29,24 +27,6 @@ class NestColumns(object):
         return {self.output_column: output}
 
 
-class ConvertYesNoMaybe(object):
-    def __init__(self, input_column):
-        self.input_column = input_column
-
-    def __call__(self, row: Dict) -> Dict:
-        yesno_answer = row[self.input_column]
-        options = ["yes", "no", "maybe"]
-        answer = options.index(yesno_answer)
-        return {"options": options, "answer_idx": answer}
-
-
-class FlattenPubmedqaContext(object):
-    def __call__(self, row: Dict) -> Dict:
-        documents = row["context"]["contexts"]
-        documents = ["\n".join(documents)]
-        return {"documents": documents}
-
-
 class AddIdx(object):
     def __init__(self, column, value):
         self.column = column
@@ -66,7 +46,7 @@ class ConvertHeadQA(object):
         return {"ra": r_index, "answers": options}
 
 
-class CleanuMedMCQAReasoning(object):
+class MedMCQACleanupReasoning(object):
     def __init__(self, reasoning_column: str = "reasoning"):
         self.reasoning_column = reasoning_column
 
@@ -83,6 +63,22 @@ class CleanuMedMCQAReasoning(object):
             #     f">> ({type(cleaned_reasoning)}) {cleaned_reasoning}"
             # )
         return {self.reasoning_column: cleaned_reasoning}
+
+
+class MedMCQAExtractContext(object):
+    def __call__(self, row: Dict) -> Dict:
+        EXAM_NAMES = ["FMGE", "AIIMS"]
+        question = row["question"]
+        subjects = [row["subject_name"], row["topic_name"]]
+        subjects = [
+            x for x in subjects if x is not None and all(y not in x for y in EXAM_NAMES)
+        ]
+        if len(subjects) == 0:
+            question_with_topic_info = question
+        else:
+            topic_info = f"{', '.join(subjects)}."
+            question_with_topic_info = f"{topic_info} {question}"
+        return {"question": question_with_topic_info}
 
 
 class Formatter(object):
@@ -117,54 +113,15 @@ class MedMCQAFormatter(Formatter):
         dataset = dataset.remove_columns(["opa", "opb", "opc", "opd"])
         # cleanup reasoning
         dataset = dataset.map(
-            CleanuMedMCQAReasoning(),
+            MedMCQACleanupReasoning(),
             desc="Cleaning up reasoning",
             num_proc=4,
         )
-        return dataset
-
-
-class PubMedQAFormatter(Formatter):
-    def __call__(self, dataset: DatasetDict, **kwargs) -> DatasetDict:
-        dataset = self.exctract_splits(dataset)
-        return DatasetDict(
-            {split: self.format(dset) for split, dset in dataset.items()}
-        )
-
-    @staticmethod
-    def exctract_splits(dataset: DatasetDict) -> DatasetDict:
-        assert set(dataset.keys()) == {Split.TRAIN}
-        dataset = dataset[Split.TRAIN]
-
-        train_dev, test = split_pubmed(dataset, 2)
-        train, valid = split_pubmed(train_dev, 2)
-        return DatasetDict(
-            {
-                Split.TRAIN: train,
-                Split.VALIDATION: valid,
-                Split.TEST: test,
-            }
-        )
-
-    def format(self, dataset: Dataset, **kwargs) -> Dataset:
-        # convert the yes/no answer
-        dataset = dataset.map(
-            ConvertYesNoMaybe("final_decision"),
-            desc="Converting yes/no answers",
-            num_proc=4,
-        )
-
-        dataset = dataset.map(
-            FlattenPubmedqaContext(),
-            desc="Flatten contexts",
-            num_proc=4,
-        )
-        dataset = dataset.rename_columns(
-            {
-                "long_answer": "reasoning",
-                "pubid": "uid",
-            }
-        )
+        # dataset = dataset.map(
+        #     MedMCQAExtractContext(),
+        #     desc="Append context to question",
+        #     num_proc=4,
+        # )
         return dataset
 
 

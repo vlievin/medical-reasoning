@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import abc
+import hashlib
 import re
+from collections import OrderedDict
 from copy import copy
 from typing import Any
 from typing import Dict
@@ -9,11 +11,21 @@ from typing import List
 from typing import Optional
 from typing import T
 
+import numpy as np
+
 from medical_reasoning.models.functional.infer_answer import infer_answer_from_choices
 from medical_reasoning.utils.datastruct import Example
 
 LINE_BRAKE = "\n"
-ACCEPTED_STYLES = {"full", "short", "none"}
+ACCEPTED_STYLES = {"full2", "full", "short", "none"}
+
+
+def format_option(symbol, option):
+    return f"{symbol}) {option}"
+
+
+def format_option_2(symbol, option):
+    return f"({symbol}) {option}"
 
 
 def get_start_indices(target: str | List, pattern: str) -> list[int]:
@@ -28,13 +40,44 @@ def safe_min(lst: T) -> Optional[T]:
         return None
 
 
+class AnswerChoicesFormat:
+    @staticmethod
+    def style_1(eg: Example):
+        return f"among {eg.option_symbols[0]} through {eg.option_symbols[-1]}"
+
+    def style_2(eg: Example):
+        return (
+            f"between {', '.join(eg.option_symbols[0:-1])} or {eg.option_symbols[-1]}"
+        )
+
+    def style_3(eg: Example):
+        x = hashlib.sha256(str(eg.uid).encode("utf-8"))
+        seed = int(x.hexdigest(), base=16) % 2 ** 32
+        rgn = np.random.RandomState(seed)
+        option_symbols = copy(eg.option_symbols)
+        rgn.shuffle(option_symbols)
+        return f"between {', '.join(option_symbols[0:-1])} or {option_symbols[-1]}"
+
+
 class PromptTemplate(object):
     name = "prompt"
     SEP = "\n\n"
-    can_be_simulated = True
     _completion_config = {}
 
     def __init__(self, *, style: str = "full"):
+        self._style = style
+        style_parts = self._style.split("-")
+        if len(style_parts) > 1:
+            style, answer_style = style_parts
+        else:
+            style, answer_style = style_parts[0], "1"
+
+        self.answer_fmt = {
+            "1": AnswerChoicesFormat.style_1,
+            "2": AnswerChoicesFormat.style_2,
+            "3": AnswerChoicesFormat.style_3,
+        }[answer_style]
+
         if style not in ACCEPTED_STYLES:
             raise ValueError(
                 f"style {style} is not recognized. Accepted styles are: {ACCEPTED_STYLES}"
@@ -48,6 +91,9 @@ class PromptTemplate(object):
     @abc.abstractmethod
     def simulate_completion(self, eg: Example, **kargs) -> str:
         raise NotImplementedError()
+
+    def can_be_simulated(self, eg: Example) -> bool:
+        return False
 
     @abc.abstractmethod
     def infer_answer(
@@ -90,19 +136,21 @@ class MultipleChoiceTemplate(PromptTemplate):
         steps = [s for s in steps if len(s)]
         return self.SEP.join(steps)
 
+    @property
+    def description(self) -> str:
+        return "--"
+
     def zero_shot_prompt(self, eg: Example):
 
         # select the preprompt
         prepromt = {
+            "full2": "Answer: ",
             "full": "Answer: ",
             "short": "A: ",
             "none": "",
         }[self.style]
 
-        return (
-            f"{prepromt}among {eg.allowed_options[0]} "
-            f"through {eg.allowed_options[-1]}, the answer is"
-        )
+        return f"{prepromt}{self.answer_fmt(eg)}, the answer is"
 
     def format_question(self, eg: Example) -> str:
         prompt = ""
@@ -110,22 +158,54 @@ class MultipleChoiceTemplate(PromptTemplate):
         if self.use_documents:
             if eg.documents is None or len(eg.documents) == 0:
                 raise ValueError("documents must be provided if use_documents is True")
-            formatted_documents = "\n".join(eg.documents)
+            docs = eg.documents
+            if len(docs) == len(eg.option_symbols):
+                if len(set(docs)) == 1:
+                    # if all documents are identical, use the first one
+                    docs = [docs[0]]
+                else:
+                    # if there is one document per answer option, assume
+                    # each document was sampled
+                    # for each option, and add a `Document <option>` at
+                    # the beginning of each document
+                    docs = [
+                        f"Document {o}. {doc}"
+                        for doc, o in zip(eg.documents, eg.option_symbols)
+                    ]
+
+            formatted_documents = "\n".join(docs)
             prompt += f"Context: {formatted_documents}\n\n"
 
+        opt_format = {
+            "full2": format_option_2,
+            "full": format_option,
+            "short": format_option,
+            "none": format_option,
+        }[self.style]
+
         formatted_options = [
-            f"{eg.allowed_options[i]}) {option}" for i, option in enumerate(eg.options)
+            opt_format(eg.option_symbols[i], option)
+            for i, option in enumerate(eg.options)
         ]
 
         # select the preprompt
-        prepromt = {
+        question_prepromt = {
+            "full2": "Question: ",
             "full": "Question: ",
             "short": "Q: ",
             "none": "",
         }[self.style]
 
+        option_prepromt = {
+            "full2": "Answer choices:\n",
+            "full": "",
+            "short": "",
+            "none": "",
+        }[self.style]
+
         prompt += (
-            f"{prepromt}{eg.question}{self.SEP}{LINE_BRAKE.join(formatted_options)}"
+            f"{question_prepromt}{eg.question}{self.SEP}{option_prepromt}"
+            f"{LINE_BRAKE.join(formatted_options)}"
         )
 
         return prompt
@@ -139,23 +219,26 @@ class MultipleChoiceTemplate(PromptTemplate):
         **kwargs,
     ) -> None | str:
 
-        return infer_answer_from_choices(
+        pred = infer_answer_from_choices(
             prompt_answer,
             options=eg.options,
-            option_symbols=eg.allowed_options,
+            option_symbols=eg.option_symbols,
             pre_answer=pre_answer,
         )
+        return pred
 
     def simulate_completion(self, eg: Example) -> str:
         return f" {eg.answer_symbol}) {eg.answer}."
 
+    def can_be_simulated(self, eg: Example) -> bool:
+        return True
 
 class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
     name = "reasoning_prompt"
 
     def __init__(self, strategy: str = "Let's think step by step", **kwargs):
         super(ReasoningMultipleChoiceTemplate, self).__init__(**kwargs)
-        if strategy in ("none", "null"):
+        if strategy in ("none", "null", "--"):
             strategy = None
         if strategy is not None:
             strategy = strategy.replace("_", " ").strip()
@@ -168,11 +251,12 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
     def format_strategy(self, eg: Example) -> str:
         # format the strategy
         strategy = copy(self.strategy)
-        strategy = strategy.replace(self.first_symbol_pattern, eg.allowed_options[0])
-        strategy = strategy.replace(self.last_symbol_pattern, eg.allowed_options[-1])
+        strategy = strategy.replace(self.first_symbol_pattern, eg.option_symbols[0])
+        strategy = strategy.replace(self.last_symbol_pattern, eg.option_symbols[-1])
 
         # select the preprompt
         prepromt = {
+            "full2": "Answer: ",
             "full": "Answer: ",
             "short": "A: ",
             "none": "",
@@ -187,6 +271,9 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
 
     def simulate_completion(self, eg: Example) -> str:
         return f"\n{eg.reasoning}"
+
+    def can_be_simulated(self, eg: Example) -> bool:
+        return eg.reasoning is not None and len(eg.reasoning) > 0
 
     def __repr__(self):
         return f'{type(self).__name__}("{self.strategy}")'
@@ -211,12 +298,8 @@ class ExtractionMultipleChoiceTemplate(MultipleChoiceTemplate):
         steps = [s for s in steps if len(s)]
         return self.SEP.join(steps)
 
-    @staticmethod
-    def extractive_prompt(eg: Example) -> str:
-        return (
-            f"\n\nTherefore, among {eg.allowed_options[0]} "
-            f"through {eg.allowed_options[-1]}, the answer is"
-        )
+    def extractive_prompt(self, eg: Example) -> str:
+        return f"\n\nTherefore, {self.answer_fmt(eg)}, the answer is"
 
     def simulate_completion(self, eg: Example) -> str:
         return f" {eg.answer_symbol}) {eg.answer}."
@@ -228,7 +311,6 @@ class ExtractionMultipleChoiceTemplate(MultipleChoiceTemplate):
 
 class UncertaintyTemplate(PromptTemplate):
     name = "uncertainty_prompt"
-    can_be_simulated = False
     _completion_config = {"max_tokens": 32, "n": 1}
 
     def __call__(self, eg: Example) -> str:
@@ -237,8 +319,8 @@ class UncertaintyTemplate(PromptTemplate):
         return self.SEP.join(steps)
 
     def uncertainty_prompt(self, eg: Example) -> str:
-
         prepromt = {
+            "full2": "Confidence: ",
             "full": "Confidence: ",
             "short": "",
             "none": "",
@@ -265,7 +347,7 @@ class UncertaintyTemplate(PromptTemplate):
         answer = infer_answer_from_choices(
             prompt_answer,
             options=eg.options,
-            option_symbols=eg.allowed_options,
+            option_symbols=eg.option_symbols,
             pre_answer=None,
         )
 
@@ -276,13 +358,13 @@ class UncertaintyTemplate(PromptTemplate):
             options=5 * [""],
             documents=[],
             reasoning=None,
-            allowed_options=["1", "2", "3", "4", "5"],
+            option_symbols=["1", "2", "3", "4", "5"],
             answer_idx=-1,
         )
         confidence = infer_answer_from_choices(
             prompt_answer,
             options=pseudo_eg.options,
-            option_symbols=pseudo_eg.allowed_options,
+            option_symbols=pseudo_eg.option_symbols,
             pre_answer=None,
         )
 
@@ -291,3 +373,20 @@ class UncertaintyTemplate(PromptTemplate):
     @property
     def description(self) -> str:
         return "uncertainty"
+
+
+def auto_templates(**templates) -> OrderedDict:
+    """Handle special cases when building chains of templates"""
+    templates = [(name, templates) for name, templates in templates.items()]
+    first_template = templates[0][1]
+    if (
+        isinstance(first_template, ReasoningMultipleChoiceTemplate)
+        and first_template.strategy is None
+    ):
+        assert isinstance(templates[1][1], ExtractionMultipleChoiceTemplate)
+        direct_template = MultipleChoiceTemplate(
+            use_documents=first_template.use_documents, style=first_template._style
+        )
+        templates = [("direct", direct_template)] + templates[2:]
+
+    return OrderedDict(templates)

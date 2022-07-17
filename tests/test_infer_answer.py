@@ -34,6 +34,7 @@ from medical_reasoning.models.functional.infer_answer import infer_answer_from_c
     ("...", "...B... _option_A_", ["A", "B"], ["_option_A_", "_option_B_"], "A"),
     ("...", "...A... _option_B_", ["A", "B"], ["_option_A_", "_option_B_"], "B"),
     ("...", "...", ["A", "B"], ["_option_A_", "_option_B_"], None),
+    ("yes A)", "reasoning", ["yes", "no"], ["_option_A_", "_option_B_"], "yes"),
 ])
 def test_infer_answer_from_choices(
     answer: str,

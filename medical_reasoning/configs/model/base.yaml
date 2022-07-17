@@ -2,6 +2,7 @@ defaults:
   - templates: cot
   - config: default
   - verifier: majority
+#  - /model/templates/direct@shot_templates
 
 _target_: medical_reasoning.models.Reasoner
 engine: ???
@@ -10,3 +11,4 @@ tokenizer: ${tokenizer}
 max_rate: 60 # rate per minute
 cache_dir: ${sys.cache_dir}/cached_funcs
 reset_cache: false
+shot_templates: ${model.templates}

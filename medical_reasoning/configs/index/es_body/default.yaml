@@ -16,12 +16,17 @@ settings:
           - stop # Removes tokens equivalent to english stopwords
           - asciifolding # Converts a-z, 1-9, and symbolic characters to their ASCII equivalent
           - my_snow # Converts tokens to its root word based snowball stemming
+          - my_number_filter # convert numbers to <number>
         tokenizer: standard
         type: custom
     filter:
       my_snow:
         language: English
         type: snowball
+      my_number_filter:
+        type: pattern_replace
+        pattern: '(\d+[.\d+]?)'
+        replacement: __NUMBER__
   # Replicas are copies of the shards and provide reliability if a node is lost
   number_of_replicas: 0
   # Shards are used to parallelize work on an index
