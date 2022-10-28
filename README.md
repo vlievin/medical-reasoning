@@ -56,6 +56,10 @@ poetry run poe medmcqa_valid
 poetry run poe pubmedqa_test
 ```
 
+## Samples
+
+Samples of generated CoTs for the USMLE, MedMCQA and PubMedQA datasets can be accessed [here]({vlievin.github.io/medical-reasoning).
+
 ## Cached GPT-3 predictions
 
 All GPT-3 completions are automatically cached (see `medical_reasoning/models/cache.py`) and re-used whenever the API is called using the same parameters. You can find all the cached completions (all experiments, all the chain-of-thoughts) in the following zip files;

@@ -3,6 +3,8 @@ runs/
 multiruns/
 multirun/
 cache/
+notebooks/
+data/
 
 
 # Editors
