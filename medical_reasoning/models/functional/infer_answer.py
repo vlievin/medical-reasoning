@@ -43,6 +43,10 @@ def infer_answer_from_choices(
     options: Optional[List] = None,
     pre_answer: Optional[str] = None,
 ) -> None | str:
+
+    if len(prompt_answer) == 1:
+        return prompt_answer
+
     # make the regex patterns for the option symbols
     option_symbols_re = [rf"{o}(\)|:|\.|,| )" for o in option_symbols]
 
@@ -80,6 +84,6 @@ def infer_answer_from_choices(
 
     logger.warning(f"Failed to match any answer ({prompt_answer})")
     if "<GPT-3-answer>" not in prompt_answer:
-        rich.print(f">> prompt_answer: {prompt_answer}")
-        rich.print(f">> pre_answer: {pre_answer}")
-        rich.print(f">> options: {options}")
+        logger.debug(f"prompt_answer: {prompt_answer}")
+        logger.debug(f"pre_answer: {pre_answer}")
+        logger.debug(f"options: {options}")

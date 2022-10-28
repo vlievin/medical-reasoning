@@ -4,7 +4,7 @@ job:
 run:
   dir: ${sys.work_dir}/runs/${now:%Y-%m-%d}/${now:%H-%M-%S}
 sweep:
-  dir: multiruns/${now:%Y-%m-%d}/${now:%H-%M-%S}
+#  dir: ${sys.work_dir}/multiruns/${now:%Y-%m-%d}/${now:%H-%M-%S}
   subdir: ${hydra.job.num}-${exp_id}
 
 # you can set here environment variables that are universal for all users

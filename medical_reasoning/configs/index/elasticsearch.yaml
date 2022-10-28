@@ -1,11 +1,11 @@
 defaults:
+  - base
   - es_body: default
-  - corpus: wiki
 
 _target_: medical_reasoning.indexes.ElasticsearchIndex
-subset: null
-ingest_bs: 100_000
-num_proc: 4
-title_boost_weight: 1.0
-passage_length: 100
-passage_stride: 50
+column_name: text
+filter_numbers: False
+corpus_name: ${index.corpus.path}-${index.corpus.name}
+aux_weights:
+  text: 1.0
+  title: 0.5
