@@ -58,7 +58,7 @@ poetry run poe pubmedqa_test
 
 ## Samples
 
-Samples of generated CoTs for the USMLE, MedMCQA and PubMedQA datasets can be accessed [here]({vlievin.github.io/medical-reasoning).
+Samples of generated CoTs for the USMLE, MedMCQA and PubMedQA datasets can be accessed [here](vlievin.github.io/medical-reasoning).
 
 ## Cached GPT-3 predictions
 
