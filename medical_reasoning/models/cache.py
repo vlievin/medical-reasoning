@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 from copy import copy
 from pathlib import Path
 from typing import Any
@@ -46,7 +47,9 @@ class CachedFunction(object):
                     shutil.rmtree(self.cache_dir)
                     self.cache_dir.mkdir(exist_ok=True, parents=True)
 
-    def __call__(self, fn: Callable, *args, **kwargs) -> (Any, bool):
+    def __call__(
+        self, fn: Callable, *args, retries: bool = True, **kwargs
+    ) -> (Any, bool):
 
         # save the arguments
         data = copy(kwargs)
@@ -63,6 +66,17 @@ class CachedFunction(object):
         if cache_file.exists():
             return dill.load(open(cache_file, "rb")), True
         else:
-            result = fn(*args, **kwargs)
+            if not retries:
+                result = fn(*args, **kwargs)
+            else:
+                sleep_time = 1
+                while True:
+                    try:
+                        result = fn(*args, **kwargs)
+                        break
+                    except Exception:
+                        time.sleep(sleep_time)
+                        sleep_time *= 2
+
             dill.dump(result, open(cache_file, "wb"))
             return result, False

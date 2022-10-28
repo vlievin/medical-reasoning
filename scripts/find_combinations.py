@@ -82,7 +82,7 @@ formatters = {
 
 class ComputeMetrics(object):
     def __init__(
-            self, records: pd.DataFrame, n_options=4, eps: float = 1e-1, noise_scale=1e-5
+        self, records: pd.DataFrame, n_options=4, eps: float = 1e-1, noise_scale=1e-5
     ):
         self.records = records
         self.n_options = n_options
@@ -160,6 +160,10 @@ class ComputeMetrics(object):
             [torch.from_numpy(x) for x in aggregated_records["log_probs"].values]
         )
         targets = torch.from_numpy(aggregated_records["labels"].values)
+        if (targets < 0).any():
+            logger.warning("Found negative targets, setting to 'zero'")
+            targets[targets < 0] = 0
+
         metrics = self.metrics(logits, targets)
         metrics["mrr"] = mean_reciprocal_rank(
             aggregated_records["predictions_list"].values,
@@ -402,7 +406,7 @@ def run():
                 else:
                     outputs = map(compute_metrics, permutations)
 
-                for output in (pbar := tqdm(outputs, total=total)):
+                for output in (pbar := tqdm(outputs, total=total)) :
                     queue += [output]
 
                     # store the queue
@@ -443,7 +447,7 @@ def run():
     with pd.option_context("max_colwidth", 1000):
         expert_data.to_latex(
             buf=multirun_path
-                / f"{base_path}experts-permutations-{args.max_perm}-{args.metric}.tex",
+            / f"{base_path}experts-permutations-{args.max_perm}-{args.metric}.tex",
             columns=["n_experts", *compute_metrics.metrics_names, "strategies"],
             formatters=formatters,
         )

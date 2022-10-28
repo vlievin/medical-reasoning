@@ -12,6 +12,7 @@ from typing import Optional
 
 import loguru
 import numpy as np
+import omegaconf
 import openai
 import yaml
 from dotenv import load_dotenv
@@ -28,7 +29,7 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 DEFAULT_CONFIG_PATH = (
-        Path(configs.__file__).parent / "model" / "config" / "default.yaml"
+    Path(configs.__file__).parent / "model" / "config" / "default.yaml"
 )
 
 
@@ -48,18 +49,18 @@ def flatten(x: List | Any) -> List | Any:
 
 class Reasoner(object):
     def __init__(
-            self,
-            *,
-            engine: str = "text-ada-001",
-            templates: Dict[str, PromptTemplate],
-            shot_templates: Optional[Dict[str, PromptTemplate]] = None,
-            verifier: Verifier,
-            price: float,
-            tokenizer: GPT2Tokenizer,
-            max_rate: float = 60,
-            cache_dir: os.PathLike = None,
-            reset_cache: bool = False,
-            config: Optional[Dict] = None,
+        self,
+        *,
+        engine: str = "text-ada-001",
+        templates: Dict[str, PromptTemplate],
+        shot_templates: Optional[Dict[str, PromptTemplate]] = None,
+        verifier: Verifier,
+        price: float,
+        tokenizer: GPT2Tokenizer,
+        max_rate: float = 60,
+        cache_dir: os.PathLike = None,
+        reset_cache: bool = False,
+        config: Optional[Dict] = None,
     ):
 
         self.engine = engine
@@ -75,6 +76,8 @@ class Reasoner(object):
 
         if config is None:
             config = yaml.safe_load(open(DEFAULT_CONFIG_PATH, "r").read())
+        if isinstance(config, omegaconf.DictConfig):
+            config = omegaconf.OmegaConf.to_container(config)
         self.config = config
 
         # state
@@ -118,17 +121,16 @@ class Reasoner(object):
         )
 
     def __call__(
-            self, eg: Example, shots: List[Example], **kwargs
+        self, eg: Example, shots: List[Example], **kwargs
     ) -> (str, Dict[str, Any]):
 
         # prepare the shots
         completed_prompts = []
         shot_templates = list(self.shot_templates.values())
         for shot in shots:
-            _, flows = self.process_example(shot,
-                                            simulate=True,
-                                            templates=shot_templates,
-                                            **kwargs)
+            _, flows = self.process_example(
+                shot, simulate=True, templates=shot_templates, **kwargs
+            )
             completed_prompts.extend(flows)
         completed_prompt = "\n\n".join(completed_prompts)
         if len(completed_prompt) > 0:
@@ -136,19 +138,18 @@ class Reasoner(object):
 
         # process the example
         templates = list(self.templates.values())
-        return self.process_example(eg,
-                                    flow=completed_prompt,
-                                    templates=templates,
-                                    **kwargs)
+        return self.process_example(
+            eg, flow=completed_prompt, templates=templates, **kwargs
+        )
 
     def apply_template(
-            self,
-            template: PromptTemplate,
-            *,
-            eg: Example,
-            simulate: bool = False,
-            flow: str,
-            meta: Dict,
+        self,
+        template: PromptTemplate,
+        *,
+        eg: Example,
+        simulate: bool = False,
+        flow: str,
+        meta: Dict,
     ) -> (List[str], List[str]):
         prompt = template(eg)
         engine_args = self.get_engine_args(**template.completion_config)
@@ -161,9 +162,7 @@ class Reasoner(object):
                 prompt_completion = template.simulate_completion(eg)
                 prompt_completions = [prompt_completion]
             else:
-                prompt_completions = self.get_prompt_completions(
-                    prompt, **engine_args
-                )
+                prompt_completions = self.get_prompt_completions(prompt, **engine_args)
         else:
             prompt_completions = self.get_prompt_completions(
                 f"{flow}{prompt}", **engine_args
@@ -199,11 +198,11 @@ class Reasoner(object):
         return flows, answers
 
     def apply_templates(
-            self,
-            templates: list[PromptTemplate],
-            *,
-            flows: str | List,
-            **kwargs,
+        self,
+        templates: list[PromptTemplate],
+        *,
+        flows: str | List,
+        **kwargs,
     ) -> (List, List[List[str]]):
         answers = []
         for template_i in templates:
@@ -223,12 +222,12 @@ class Reasoner(object):
         return flows, answers
 
     def process_example(
-            self,
-            eg: Example,
-            *,
-            templates: List[PromptTemplate],
-            simulate: bool = False,
-            flow: str = ""
+        self,
+        eg: Example,
+        *,
+        templates: List[PromptTemplate],
+        simulate: bool = False,
+        flow: str = "",
     ) -> (Prediction, List[str]):
         meta = {}
         if len(self.templates) == 0:
@@ -268,6 +267,7 @@ class Reasoner(object):
                 engine=self.engine,
                 prompt=prompt,
                 **kwargs,
+                retries=True,
             )
             completions = [row["text"] for row in response["choices"]]
 
@@ -308,7 +308,7 @@ class Reasoner(object):
         of no more than 60 requests per minute"""
         RATE_BASE_DURATION = 60
         last_calls = self.last_calls(RATE_BASE_DURATION)
-        if len(last_calls) >= self.max_rate - 1:
+        if len(last_calls) > self.max_rate:
             sleep_time = RATE_BASE_DURATION - (time.time() - last_calls[0])
             time.sleep(max(0, sleep_time))
 

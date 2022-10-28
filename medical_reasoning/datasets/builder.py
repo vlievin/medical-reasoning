@@ -12,6 +12,7 @@ from datasets import Dataset
 from datasets import DatasetDict
 
 from medical_reasoning.datasets.builders import medqa
+from medical_reasoning.datasets.builders import mmlu_usmle
 from medical_reasoning.datasets.builders import pubmedqa
 from medical_reasoning.datasets.formatters import HeadQAFormatter
 from medical_reasoning.datasets.formatters import MedMCQAFormatter
@@ -22,6 +23,7 @@ QA_DATASETS = {
     "pubmedqa": (pubmedqa.__file__, "pqa-l"),
     "headqa": ("head_qa", "en"),
     "medmcqa": ("medmcqa", None),
+    "mmlu_usmle": (mmlu_usmle.__file__, None),
 }
 
 QA_FORMATTERS = {

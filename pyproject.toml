@@ -44,14 +44,20 @@ experiment = "medical_reasoning.run:run"
 
 
 [tool.poe.tasks]
-format  = "pre-commit run --all-files"
-test = "python -m pytest"
+# testing / debugging exps
 debug_exps = "experiment -m model=ada dataset=medqa_us,medmcqa dataset.subset=3 dataset.splits=test"
 subset_exps = "experiment -m model=davinci dataset=medmcqa,headqa,medqa_us dataset.subset=30 dataset.splits=test"
-strategies = "experiment -m dataset=medqa_us dataset.splits=validation dataset.subset=100 'strategy=glob(strat_*)' max_tokens=256 prompt_style=short"
-styles = "experiment -m dataset=medqa_us dataset.splits=validation dataset.subset=100 strategy=strat_4,strat_7 prompt_style=none,short,full"
+valid_strategies = "experiment -m dataset=medqa_us dataset.splits=validation dataset.subset=100 'strategy=glob(strat_*)' max_tokens=256 prompt_style=short"
+valid_styles = "experiment -m dataset=medqa_us dataset.splits=validation dataset.subset=100 strategy=strat_4,strat_7 prompt_style=none,short,full"
+# main experiments
 medqa_test = "experiment -m dataset=medqa_us dataset.splits=test model=davinci 'strategy=glob(strat__*)' prompt_style=short"
 pubmedqa_test = "experiment -m dataset=pubmedqa dataset.splits=test model=davinci 'strategy=glob(strat__*)' prompt_style=full n_docs=1"
 medmcqa_valid = "experiment -m dataset=medmcqa dataset.splits=validation dataset.subset=1000 model=davinci 'strategy=glob(strat__*)' prompt_style=full n_docs=0,1"
+medmcqa_test = "experiment -m dataset=medmcqa dataset.splits=test model=davinci 'strategy=glob(strat__*)' prompt_style=full n_docs=1"
+# additional results
+mmlu_vs_medqa = "experiment -m dataset=mmlu_usmle,medqa_us dataset.splits=test strategy=strat__0 prompt_style=short model=code max_tokens=300"
+# utility scripts
+format  = "pre-commit run --all-files"
+test = "python -m pytest"
 find_combinations = "python -m scripts.find_combinations"
 generate_html = "python -m scripts.generate_html"

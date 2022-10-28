@@ -233,6 +233,7 @@ class MultipleChoiceTemplate(PromptTemplate):
     def can_be_simulated(self, eg: Example) -> bool:
         return True
 
+
 class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
     name = "reasoning_prompt"
 

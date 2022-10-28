@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import copy
 from pathlib import Path
 from typing import Any
 from typing import Dict
@@ -9,6 +10,7 @@ from typing import Optional
 from typing import Tuple
 
 import numpy as np
+import omegaconf
 import rich
 from datasets import Dataset
 from hydra.utils import instantiate
@@ -17,7 +19,6 @@ from torch.utils.data import Dataset as TorchDataset
 
 from medical_reasoning.datasets import DatasetBuilder
 from medical_reasoning.datasets.stats import DatasetStats
-from medical_reasoning.indexes import ElasticsearchIndex
 from medical_reasoning.indexes.base import Index
 from medical_reasoning.utils.datastruct import Example
 from medical_reasoning.utils.datastruct import permute_eg
@@ -38,6 +39,7 @@ class Preprocessing(TorchDataset):
         # store the attributes
         self.dataset = dataset
         self.config = config
+        omegaconf.OmegaConf.resolve(self.config)
         self.option_symbols = option_symbols
         self.use_index = use_index
         self._is_instantiated = False
@@ -80,13 +82,14 @@ class Preprocessing(TorchDataset):
         self._is_instantiated = True
 
     def __getstate__(self):
-        state = self.__dict__
+        state = copy(self.__dict__)
         state.pop("index", None)
         state.pop("shots_dataset", None)
         state["_is_instantiated"] = False
+        return state
 
     def __setstate__(self, state):
-        self.__dict__ = state
+        self.__dict__.update(state)
         self._is_instantiated = False
 
     def make_shots_egs(
@@ -143,6 +146,7 @@ class Preprocessing(TorchDataset):
 
         if percentiles is None:
             percentiles = [50, 90]
+
         shots_builder: DatasetBuilder = instantiate(
             config.dataset,
             splits="train",
@@ -150,7 +154,6 @@ class Preprocessing(TorchDataset):
         )
         shots_dataset = shots_builder()
         shots_dataset = shots_dataset["train"]
-        rich.print(f"Shots Dataset:\n{shots_dataset}")
         stats = DatasetStats(percentiles=percentiles)
         shots_stats = stats(shots_dataset)
         # take the training split and use only the reasonings in percentiles [50, 95]

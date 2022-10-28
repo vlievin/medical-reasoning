@@ -14,6 +14,7 @@ import jinja2
 import rich
 from loguru import logger
 from omegaconf import OmegaConf
+
 from medical_reasoning.run import make_info  # type: ignore
 
 SEP = 80 * "-" + "\n\n"
@@ -36,7 +37,7 @@ formatted_dset = {"medqa_us": "USMLE", "pubmedqa": "PubMedQA-L", "medmcqa": "Med
 
 
 def load_data(
-        data_dir: Path, filter_info: Optional[str]
+    data_dir: Path, filter_info: Optional[str]
 ) -> (List[str], List[Dict[str, Any]]):
     # placeholders for the data + parameters
     answers = defaultdict(dict)
@@ -79,7 +80,10 @@ def load_data(
                     # split questions
                     question_parts = question.split(q_del)
                     if len(question_parts) > 1:
-                        question = f"<small><i>{q_del.join(question_parts[:-1])}</small></i>{q_del}{question_parts[-1]}"
+                        question = (
+                            f"<small><i>{q_del.join(question_parts[:-1])}"
+                            f"</small></i>{q_del}{question_parts[-1]}"
+                        )
                 except Exception as exc:
                     rich.print(len(flow.split(ans_del)))
                     logger.error(exc)
@@ -88,9 +92,10 @@ def load_data(
                 outcome = "&#9989; " if is_correct else "&#10060; "
 
                 # emphasis the right answer
-                formatted_ground_truth = ground_truth.replace(': ', ') ')
+                formatted_ground_truth = ground_truth.replace(": ", ") ")
                 question = question.replace(
-                    formatted_ground_truth, rf"<strong>{formatted_ground_truth}</strong>"
+                    formatted_ground_truth,
+                    rf"<strong>{formatted_ground_truth}</strong>",
                 )
 
                 # store

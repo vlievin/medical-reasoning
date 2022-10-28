@@ -1,0 +1,4 @@
+defaults:
+  - default
+
+stop: ["<|endoftext|>", "Q: ", "Question: "]

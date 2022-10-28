@@ -1,2 +1,2 @@
-cache_dir: /scratch/${whoami:}/cache/
+cache_dir: /scratch/${whoami:}/medical-reasoning-cache/
 work_dir: /scratch/${whoami:}/medical-reasoning/

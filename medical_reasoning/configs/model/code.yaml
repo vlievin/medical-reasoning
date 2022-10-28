@@ -1,0 +1,6 @@
+defaults:
+  - base
+  - override config: code
+
+engine: code-davinci-002
+price: 0.0
