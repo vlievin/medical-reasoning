@@ -69,19 +69,12 @@ https://f001.backblazeb2.com/file/FindZebraData/medical-reasoning/cached_funcs.z
 ```
 @misc{https://doi.org/10.48550/arxiv.2207.08143,
   doi = {10.48550/ARXIV.2207.08143},
-
   url = {https://arxiv.org/abs/2207.08143},
-
   author = {Liévin, Valentin and Hother, Christoffer Egeberg and Winther, Ole},
-
   keywords = {Computation and Language (cs.CL), Artificial Intelligence (cs.AI), Machine Learning (cs.LG), FOS: Computer and information sciences, FOS: Computer and information sciences, I.2.1; I.2.7},
-
   title = {Can large language models reason about medical questions?},
-
   publisher = {arXiv},
-
   year = {2022},
-
   copyright = {arXiv.org perpetual, non-exclusive license}
 }
 ```
