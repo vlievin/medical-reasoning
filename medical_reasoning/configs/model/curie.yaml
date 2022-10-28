@@ -2,4 +2,4 @@ defaults:
   - base
 
 engine: text-curie-001
-price: 0.0060
+price: 0.002
