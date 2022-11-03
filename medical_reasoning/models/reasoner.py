@@ -20,6 +20,7 @@ from transformers import GPT2Tokenizer
 
 from medical_reasoning import configs
 from medical_reasoning.models.cache import CachedFunction
+from medical_reasoning.models.stop import Stop
 from medical_reasoning.models.templates import PromptTemplate
 from medical_reasoning.models.verifiers import Verifier
 from medical_reasoning.utils.datastruct import Example
@@ -29,7 +30,7 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 DEFAULT_CONFIG_PATH = (
-    Path(configs.__file__).parent / "model" / "config" / "default.yaml"
+        Path(configs.__file__).parent / "model" / "config" / "default.yaml"
 )
 
 
@@ -49,18 +50,21 @@ def flatten(x: List | Any) -> List | Any:
 
 class Reasoner(object):
     def __init__(
-        self,
-        *,
-        engine: str = "text-ada-001",
-        templates: Dict[str, PromptTemplate],
-        shot_templates: Optional[Dict[str, PromptTemplate]] = None,
-        verifier: Verifier,
-        price: float,
-        tokenizer: GPT2Tokenizer,
-        max_rate: float = 60,
-        cache_dir: os.PathLike = None,
-        reset_cache: bool = False,
-        config: Optional[Dict] = None,
+            self,
+            *,
+            engine: str = "text-ada-001",
+            templates: Dict[str, PromptTemplate],
+            shot_templates: Optional[Dict[str, PromptTemplate]] = None,
+            verifier: Verifier,
+            price: float,
+            tokenizer: GPT2Tokenizer,
+            max_rate: float = 60,
+            cache_dir: os.PathLike = None,
+            reset_cache: bool = False,
+            config: Optional[Dict] = None,
+            pre_prompt: Optional[str] = None,
+            separator: str = "\n\n",
+            stop: Optional[Stop] = None,
     ):
 
         self.engine = engine
@@ -73,6 +77,9 @@ class Reasoner(object):
         self.tokenizer = tokenizer
         self.max_rate = max_rate
         self.cache = CachedFunction(cache_dir=cache_dir, reset_cache=reset_cache)
+        self.pre_prompt = pre_prompt
+        self.separator = separator
+        self.stop = stop
 
         if config is None:
             config = yaml.safe_load(open(DEFAULT_CONFIG_PATH, "r").read())
@@ -121,20 +128,23 @@ class Reasoner(object):
         )
 
     def __call__(
-        self, eg: Example, shots: List[Example], **kwargs
+            self, eg: Example, shots: List[Example], **kwargs
     ) -> (str, Dict[str, Any]):
 
         # prepare the shots
         completed_prompts = []
+        if self.pre_prompt is not None:
+            completed_prompts.append(self.pre_prompt)
+
         shot_templates = list(self.shot_templates.values())
         for shot in shots:
             _, flows = self.process_example(
                 shot, simulate=True, templates=shot_templates, **kwargs
             )
             completed_prompts.extend(flows)
-        completed_prompt = "\n\n".join(completed_prompts)
+        completed_prompt = self.separator.join(completed_prompts)
         if len(completed_prompt) > 0:
-            completed_prompt += "\n\n"
+            completed_prompt += self.separator
 
         # process the example
         templates = list(self.templates.values())
@@ -143,14 +153,14 @@ class Reasoner(object):
         )
 
     def apply_template(
-        self,
-        template: PromptTemplate,
-        *,
-        eg: Example,
-        simulate: bool = False,
-        flow: str,
-        meta: Dict,
-    ) -> (List[str], List[str]):
+            self,
+            template: PromptTemplate,
+            *,
+            eg: Example,
+            simulate: bool = False,
+            flow: str,
+            meta: Dict,
+    ) -> (List[str], List[str], bool):
         prompt = template(eg)
         engine_args = self.get_engine_args(**template.completion_config)
         if simulate:
@@ -183,6 +193,13 @@ class Reasoner(object):
             for prompt_completion in prompt_completions
         ]
 
+        # check if the completion chain can be stopped
+        if self.stop is not None:
+            stops = [self.stop(c, eg=eg, meta=meta) for c in prompt_completions]
+            stop = all(stops)
+        else:
+            stop = False
+
         # store the answers
         answer_key = f"{template.name}.answers"
         if answer_key in meta:
@@ -195,39 +212,43 @@ class Reasoner(object):
             f"{prompt}{prompt_completion}" for prompt_completion in prompt_completions
         ]
         flows = extend_flows(flow, flows_extensions)
-        return flows, answers
+        return flows, answers, stop
 
     def apply_templates(
-        self,
-        templates: list[PromptTemplate],
-        *,
-        flows: str | List,
-        **kwargs,
+            self,
+            templates: list[PromptTemplate],
+            *,
+            flows: str | List,
+            **kwargs,
     ) -> (List, List[List[str]]):
         answers = []
         for template_i in templates:
             output_flows_i = []
             answers_i = []
+            stop_i = []
             for flow in flows:
-                output_flows_ij, answers_ij = self.apply_template(
+                output_flows_ij, answers_ij, stop_ij = self.apply_template(
                     template_i, flow=flow, **kwargs
                 )
                 output_flows_i.extend(output_flows_ij)
                 answers_i.extend(answers_ij)
+                stop_i.append(stop_ij)
 
             # update the flows and the answers
             flows = output_flows_i
             answers.append(answers_i)
+            if all(stop_i):
+                break
 
         return flows, answers
 
     def process_example(
-        self,
-        eg: Example,
-        *,
-        templates: List[PromptTemplate],
-        simulate: bool = False,
-        flow: str = "",
+            self,
+            eg: Example,
+            *,
+            templates: List[PromptTemplate],
+            simulate: bool = False,
+            flow: str = "",
     ) -> (Prediction, List[str]):
         meta = {}
         if len(self.templates) == 0:

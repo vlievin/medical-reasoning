@@ -19,6 +19,7 @@ exp_id: ${dataset.name}-${model.engine}-${len:${model.templates}}steps-${info}-$
 prompt_style: full
 n_docs: 0
 shots: 0
+pre_prompt: null
 permute_options: false
 strip_reasoning: false
 n_samples: 1
@@ -26,7 +27,7 @@ temperature: 0
 max_tokens: 1024
 num_workers: 1
 num_proc: 8
-info: ${make_info:${prompt_style},${permute_options},${n_docs},${shots},${strip_reasoning}}
+info: ${make_info:${prompt_style},${permute_options},${n_docs},${shots},${strip_reasoning},${pre_prompt}}
 
 # technicals
 print_config: true

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -11,6 +12,7 @@ from typing import List
 
 import datasets
 import hydra
+import requests
 import rich
 from elasticsearch.exceptions import ElasticsearchWarning
 from hydra.core.hydra_config import HydraConfig
@@ -37,7 +39,7 @@ from medical_reasoning.utils.preprocessing import Preprocessing
 SEPARATOR = "-" * 80 + "\n"
 
 
-def make_info(prompt_style, permute_options, n_docs, shots, strip_reasoning):
+def make_info(prompt_style, permute_options, n_docs, shots, strip_reasoning, pre_prompt):
     info_name = prompt_style
 
     if bool(permute_options):
@@ -52,7 +54,35 @@ def make_info(prompt_style, permute_options, n_docs, shots, strip_reasoning):
     if bool(strip_reasoning):
         info_name += "-strip-reasoning"
 
+    if pre_prompt is not None:
+        assert isinstance(pre_prompt, str)
+        hash = hashlib.sha1(pre_prompt.encode("UTF-8")).hexdigest()
+        info_name += f"-pre{hash}"
+
     return info_name
+
+
+def load_file_or_url(path: str, key:str=None):
+    if path.startswith("http"):
+        content = requests.get(path).text
+    else:
+        path = Path(path)
+        if not path.exists():
+            raise ValueError(f"Path {path} is not a file.")
+        with open(path, "r") as f:
+            content = f.read()
+
+    if path.endswith(".json"):
+        content = json.loads(content)
+    elif path.endswith(".yaml"):
+        content = OmegaConf.load(content)
+    else:
+        raise ValueError(f"Could not load {path}.")
+
+    if key is not None:
+        content = content[key]
+
+    return content
 
 
 OmegaConf.register_new_resolver("if", lambda x, y, z: y if x else z)
@@ -62,6 +92,7 @@ OmegaConf.register_new_resolver("getcwd", os.getcwd)
 OmegaConf.register_new_resolver("hostname", socket.gethostname)
 OmegaConf.register_new_resolver("shorten", lambda x, y: str(slugify(x))[: int(y)])
 OmegaConf.register_new_resolver("make_info", make_info)
+OmegaConf.register_new_resolver("load", load_file_or_url)
 
 warnings.filterwarnings(
     action="ignore",
@@ -147,8 +178,8 @@ def run(config: DictConfig) -> None:
             collate_fn=get_first_el,
         )
         for i, (row_idx, eg, shots) in (
-            pbar := tqdm(enumerate(loader), unit="question", total=len(loader.dataset))
-        ) :
+                pbar := tqdm(enumerate(loader), unit="question", total=len(loader.dataset))
+        ):
             # process the Example with the model
             pred, flows = model(eg, shots=shots)
 
@@ -234,10 +265,10 @@ def run(config: DictConfig) -> None:
 
 
 def format_prediction(
-    eg: Example,
-    pred: Prediction,
-    q_locator: str,
-    flows: List[str],
+        eg: Example,
+        pred: Prediction,
+        q_locator: str,
+        flows: List[str],
 ) -> str:
     """Format the prediction for a given example."""
     formatted_options = "\n".join(

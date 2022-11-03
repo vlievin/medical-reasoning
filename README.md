@@ -54,6 +54,7 @@ Groups of experiments are defined in `pyproject.toml`
 poetry run poe medqa_test
 poetry run poe medmcqa_valid
 poetry run poe pubmedqa_test
+poetry run poe mmlu_test_code
 ```
 
 ## Samples

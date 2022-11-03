@@ -48,7 +48,7 @@ class CachedFunction(object):
                     self.cache_dir.mkdir(exist_ok=True, parents=True)
 
     def __call__(
-        self, fn: Callable, *args, retries: bool = True, **kwargs
+            self, fn: Callable, *args, retries: bool = True, **kwargs
     ) -> (Any, bool):
 
         # save the arguments
@@ -70,13 +70,18 @@ class CachedFunction(object):
                 result = fn(*args, **kwargs)
             else:
                 sleep_time = 1
+                n_tries = 0
                 while True:
                     try:
                         result = fn(*args, **kwargs)
                         break
-                    except Exception:
+                    except Exception as exc:
                         time.sleep(sleep_time)
                         sleep_time *= 2
+                        n_tries += 1
+                        if n_tries % 10 == 0 and n_tries > 0:
+                            loguru.logger.warning(
+                                f"Failed to run {fn} after {n_tries} tries: {exc}")
 
             dill.dump(result, open(cache_file, "wb"))
             return result, False

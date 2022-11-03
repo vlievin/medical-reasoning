@@ -1,0 +1,3 @@
+_target_: medical_reasoning.models.stop.StopIfContainsAnswer
+answer_pattern: "the answer is"
+lowercase: true

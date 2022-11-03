@@ -16,8 +16,7 @@ import numpy as np
 from medical_reasoning.models.functional.infer_answer import infer_answer_from_choices
 from medical_reasoning.utils.datastruct import Example
 
-LINE_BRAKE = "\n"
-ACCEPTED_STYLES = {"full2", "full", "short", "none"}
+ACCEPTED_STYLES = {"full2", "full", "short", "mmlu", "none"}
 
 
 def format_option(symbol, option):
@@ -61,7 +60,6 @@ class AnswerChoicesFormat:
 
 class PromptTemplate(object):
     name = "prompt"
-    SEP = "\n\n"
     _completion_config = {}
 
     def __init__(self, *, style: str = "full"):
@@ -83,6 +81,13 @@ class PromptTemplate(object):
                 f"style {style} is not recognized. Accepted styles are: {ACCEPTED_STYLES}"
             )
         self.style = style
+        self.separator = {
+            "full2": "\n\n",
+            "full": "\n\n",
+            "short": "\n\n",
+            "mmlu": "\n",
+            "none": "\n\n",
+        }[self.style]
 
     @abc.abstractmethod
     def __call__(self, eg: Example) -> str:
@@ -134,7 +139,7 @@ class MultipleChoiceTemplate(PromptTemplate):
     def __call__(self, eg: Example) -> str:
         steps = [self.format_question(eg), self.zero_shot_prompt(eg)]
         steps = [s for s in steps if len(s)]
-        return self.SEP.join(steps)
+        return self.separator.join(steps)
 
     @property
     def description(self) -> str:
@@ -147,6 +152,7 @@ class MultipleChoiceTemplate(PromptTemplate):
             "full2": "Answer: ",
             "full": "Answer: ",
             "short": "A: ",
+            "mmlu": "A: ",
             "none": "",
         }[self.style]
 
@@ -174,12 +180,13 @@ class MultipleChoiceTemplate(PromptTemplate):
                     ]
 
             formatted_documents = "\n".join(docs)
-            prompt += f"Context: {formatted_documents}\n\n"
+            prompt += f"Context: {formatted_documents}{self.separator}"
 
         opt_format = {
             "full2": format_option_2,
             "full": format_option,
             "short": format_option,
+            "mmlu": format_option_2,
             "none": format_option,
         }[self.style]
 
@@ -193,19 +200,29 @@ class MultipleChoiceTemplate(PromptTemplate):
             "full2": "Question: ",
             "full": "Question: ",
             "short": "Q: ",
+            "mmlu": "Q: ",
             "none": "",
         }[self.style]
 
         option_prepromt = {
-            "full2": "Answer choices:\n",
-            "full": "",
-            "short": "",
-            "none": "",
+            "full2": f"Answer choices:\n",
+            "full": self.separator,
+            "short": self.separator,
+            "mmlu": "\n",
+            "none": self.separator,
+        }[self.style]
+
+        option_sep = {
+            "full2": "\n",
+            "full": "\n",
+            "short": "\n",
+            "mmlu": " ",
+            "none": "\n",
         }[self.style]
 
         prompt += (
-            f"{question_prepromt}{eg.question}{self.SEP}{option_prepromt}"
-            f"{LINE_BRAKE.join(formatted_options)}"
+            f"{question_prepromt}{eg.question}{option_prepromt}"
+            f"{option_sep.join(formatted_options)}"
         )
 
         return prompt
@@ -260,6 +277,7 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
             "full2": "Answer: ",
             "full": "Answer: ",
             "short": "A: ",
+            "mmlu": "A: ",
             "none": "",
         }[self.style]
 
@@ -268,7 +286,7 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
     def __call__(self, eg: Example) -> str:
         steps = [self.format_question(eg), self.format_strategy(eg)]
         steps = [s for s in steps if len(s)]
-        return self.SEP.join(steps)
+        return self.separator.join(steps)
 
     def simulate_completion(self, eg: Example) -> str:
         return f"\n{eg.reasoning}"
@@ -279,16 +297,6 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
     def __repr__(self):
         return f'{type(self).__name__}("{self.strategy}")'
 
-    def infer_answer(
-        self,
-        prompt_answer: str,
-        *,
-        eg: Example,
-        pre_answer: Optional[str] = None,
-        **kwargs,
-    ) -> None | str:
-        return None
-
 
 class ExtractionMultipleChoiceTemplate(MultipleChoiceTemplate):
     name = "extractive_prompt"
@@ -297,7 +305,7 @@ class ExtractionMultipleChoiceTemplate(MultipleChoiceTemplate):
     def __call__(self, eg: Example) -> str:
         steps = [self.extractive_prompt(eg)]
         steps = [s for s in steps if len(s)]
-        return self.SEP.join(steps)
+        return self.separator.join(steps)
 
     def extractive_prompt(self, eg: Example) -> str:
         return f"\n\nTherefore, {self.answer_fmt(eg)}, the answer is"
@@ -317,13 +325,14 @@ class UncertaintyTemplate(PromptTemplate):
     def __call__(self, eg: Example) -> str:
         steps = [self.uncertainty_prompt(eg)]
         steps = [s for s in steps if len(s)]
-        return self.SEP.join(steps)
+        return self.separator.join(steps)
 
     def uncertainty_prompt(self, eg: Example) -> str:
         prepromt = {
             "full2": "Confidence: ",
             "full": "Confidence: ",
             "short": "",
+            "mmlu": "",
             "none": "",
         }[self.style]
         return (
