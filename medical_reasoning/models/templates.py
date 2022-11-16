@@ -233,6 +233,7 @@ class MultipleChoiceTemplate(PromptTemplate):
         *,
         eg: Example,
         pre_answer: Optional[str] = None,
+        warn: bool = True,
         **kwargs,
     ) -> None | str:
 
@@ -241,6 +242,7 @@ class MultipleChoiceTemplate(PromptTemplate):
             options=eg.options,
             option_symbols=eg.option_symbols,
             pre_answer=pre_answer,
+            warn=warn,
         )
         return pred
 
@@ -287,6 +289,14 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
         steps = [self.format_question(eg), self.format_strategy(eg)]
         steps = [s for s in steps if len(s)]
         return self.separator.join(steps)
+
+    def infer_answer(
+            self,
+            *args,
+            warn: bool = False,
+            **kwargs,
+    ) -> None | str:
+        return super().infer_answer(*args, warn=warn, **kwargs)
 
     def simulate_completion(self, eg: Example) -> str:
         return f"\n{eg.reasoning}"

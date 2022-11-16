@@ -64,24 +64,30 @@ class CachedFunction(object):
         cache_file = self.cache_dir / filename
 
         if cache_file.exists():
-            return dill.load(open(cache_file, "rb")), True
-        else:
-            if not retries:
-                result = fn(*args, **kwargs)
-            else:
-                sleep_time = 1
-                n_tries = 0
-                while True:
-                    try:
-                        result = fn(*args, **kwargs)
-                        break
-                    except Exception as exc:
-                        time.sleep(sleep_time)
-                        sleep_time *= 2
-                        n_tries += 1
-                        if n_tries % 10 == 0 and n_tries > 0:
-                            loguru.logger.warning(
-                                f"Failed to run {fn} after {n_tries} tries: {exc}")
+            try:
+                ckpt = dill.load(open(cache_file, "rb"))
+                return ckpt, True
+            except EOFError:
+                loguru.logger.warning(f"Cache file {cache_file} is corrupted")
+                cache_file.unlink()
 
-            dill.dump(result, open(cache_file, "wb"))
-            return result, False
+        # run the function
+        if not retries:
+            result = fn(*args, **kwargs)
+        else:
+            sleep_time = 1
+            n_tries = 0
+            while True:
+                try:
+                    result = fn(*args, **kwargs)
+                    break
+                except Exception as exc:
+                    time.sleep(sleep_time)
+                    sleep_time *= 2
+                    n_tries += 1
+                    if n_tries % 10 == 0 and n_tries > 0:
+                        loguru.logger.warning(
+                            f"Failed to run {fn} after {n_tries} tries: {exc}")
+
+        dill.dump(result, open(cache_file, "wb"))
+        return result, False
