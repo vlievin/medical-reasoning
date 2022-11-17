@@ -28,6 +28,7 @@ class CachedFunction(object):
     def __init__(self, cache_dir: os.PathLike, reset_cache: bool = False):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(exist_ok=True, parents=True)
+        self.only_use_cache = os.environ.get("ONLY_USE_CACHE", False)
 
         if self.cache_dir.exists():
             n_files = len(list(self.cache_dir.iterdir()))
@@ -70,6 +71,11 @@ class CachedFunction(object):
             except EOFError:
                 loguru.logger.warning(f"Cache file {cache_file} is corrupted")
                 cache_file.unlink()
+
+
+        if self.only_use_cache:
+            raise FileNotFoundError(f"Cache file {cache_file} not found. "
+                                    f"Envirnoment variable ONLY_USE_CACHE is set.")
 
         # run the function
         if not retries:

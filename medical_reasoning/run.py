@@ -31,6 +31,7 @@ from tqdm import tqdm
 from medical_reasoning.datasets import DatasetBuilder
 from medical_reasoning.datasets.stats import DatasetStats
 from medical_reasoning.models import Reasoner
+from medical_reasoning.models.templates import ReasoningMultipleChoiceTemplate
 from medical_reasoning.utils.config import print_config
 from medical_reasoning.utils.datastruct import Example
 from medical_reasoning.utils.datastruct import Prediction
@@ -162,6 +163,11 @@ def run(config: DictConfig) -> None:
     output_dir = Path(os.getcwd()) / "output"
     output_dir.mkdir(exist_ok=True, parents=True)
 
+    # run the model
+    fname = Path(os.getcwd()).name
+    dump_output_dir = result_file.parent / "dumps" / fname
+    dump_output_dir.mkdir(exist_ok=True, parents=True)
+
     logger.info(f"Logging to {output_dir}")
 
     split_info = [f"{split} ({len(dataset[split])})" for split in splits]
@@ -206,6 +212,12 @@ def run(config: DictConfig) -> None:
             fname = fname.replace("/", "")
             with open(output_dir / fname, "w") as f:
                 f.write(output_str)
+
+            # dump all data to file
+            all_data = get_all_data(eg, pred, q_locator, model=model,flows=flows)
+            fname = fname.replace(".txt", ".json")
+            with open(dump_output_dir / fname, "w") as f:
+                f.write(json.dumps(all_data, indent=2))
 
         # replace answers that couldn't be predicted with the most common answer
         preds_freq = Counter(preds).most_common()
@@ -263,6 +275,46 @@ def run(config: DictConfig) -> None:
 
     logger.info(f">> Logged to {output_dir}")
 
+def get_all_data(
+        eg: Example,
+        pred: Prediction,
+        q_locator: str,
+        model: Reasoner,
+        flows: List[str],
+):
+    assert len(flows) == 1
+    flow = flows[0]
+
+    output = {
+        "question": eg.question,
+        "options": eg.options,
+        "answer": eg.answer,
+        "answer_idx": eg.answer_idx,
+        "answer_symbol": eg.answer_symbol,
+        "prediction": pred.label,
+        "prediction_idx": pred.idx,
+        "prediction_symbol": pred.outcome,
+        "prompt_and_completion": flow,
+        "q_locator": q_locator,
+    }
+
+    if "reasoning" in model.templates:
+        reasoning_template = model.templates["reasoning"]
+        output["strategy"] = reasoning_template.strategy
+        output["style"] = reasoning_template.style
+        output["reasoning_prompt"] = reasoning_template.format_strategy(eg=eg)
+        extractive_template = model.templates["extraction"]
+        output["extractive_prompt"] = extractive_template.extractive_prompt(eg=eg)
+        answer_symbol = {"short": "A: ", "full": "Answer: "}[output["style"]]
+
+        # split the flow
+        task_prompt, x = flow.split(output["reasoning_prompt"])
+        cot, answer = x.split(output["extractive_prompt"])
+        output["task_prompt"] = task_prompt
+        output["cot"] = (output["reasoning_prompt"] + cot).replace(answer_symbol, "")
+        # output["extractive_prompt_and_completion"] = output["extractive_prompt"] + answer
+
+    return output
 
 def format_prediction(
         eg: Example,
