@@ -186,12 +186,15 @@ class Reasoner(object):
             meta[completion_key] = prompt_completions
 
         # infer the answers
-        answers = [
-            template.infer_answer(
-                prompt_completion, eg=eg, pre_answer=flow[: -len(prompt_completion)]
-            )
-            for prompt_completion in prompt_completions
-        ]
+        if simulate:
+            answers = []
+        else:
+            answers = [
+                template.infer_answer(
+                    prompt_completion, eg=eg, pre_answer=flow[: -len(prompt_completion)]
+                )
+                for prompt_completion in prompt_completions
+            ]
 
         # check if the completion chain can be stopped
         if self.stop is not None:
@@ -249,7 +252,7 @@ class Reasoner(object):
             templates: List[PromptTemplate],
             simulate: bool = False,
             flow: str = "",
-    ) -> (Prediction, List[str]):
+    ) -> (Optional[Prediction], List[str]):
         meta = {}
         if len(self.templates) == 0:
             raise ValueError("No template was provided.")
@@ -264,7 +267,10 @@ class Reasoner(object):
         )
 
         # infer the answer and returns with the completed flows
-        prediction = self.verifier(answers, eg=eg, meta=meta)
+        if not simulate:
+            prediction = self.verifier(answers, eg=eg, meta=meta)
+        else:
+            prediction = None
         return prediction, flows
 
     def get_prompt_completions(self, prompt, **kwargs) -> List[str]:

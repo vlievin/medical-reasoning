@@ -4,3 +4,4 @@ defaults:
 
 engine: code-davinci-002
 price: 0.0
+max_rate: 6000

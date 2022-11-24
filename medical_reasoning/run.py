@@ -141,6 +141,7 @@ def run(config: DictConfig) -> None:
     option_symbols = builder.options
     dataset_stats = DatasetStats()(dataset)
     json.dump(dataset_stats, Path("dataset_stats.json").open("w"), indent=2)
+    rich.print(dataset_stats)
 
     # initialize the preprocessing object
     use_index = config.n_docs > 0 and "documents" not in dataset[splits[0]].column_names
@@ -169,12 +170,13 @@ def run(config: DictConfig) -> None:
     for split in splits:
         labels = []
         preds = []
+        probs = []
         locators = []
         loader = DataLoader(
             preprocessing[split],
             num_workers=config.num_workers,
             batch_size=1,
-            shuffle=False,
+            shuffle=config.get("shuffle_loader", False),
             collate_fn=get_first_el,
         )
         for i, (row_idx, eg, shots) in (
@@ -186,6 +188,7 @@ def run(config: DictConfig) -> None:
             # update the trackers
             labels.append(eg.answer_idx)
             preds.append(pred.idx)
+            probs.append(pred.probs)
 
             # log the progress
             f1 = f1_score(labels, preds, average="macro")
@@ -244,6 +247,7 @@ def run(config: DictConfig) -> None:
                         **split_results,
                         "labels": labels,
                         "predictions": preds,
+                        "probs": probs,
                         "locators": locators,
                         "preds_freq": preds_freq,
                     }

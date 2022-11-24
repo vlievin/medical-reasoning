@@ -56,13 +56,23 @@ medmcqa_valid = "experiment -m dataset=medmcqa dataset.splits=validation dataset
 medmcqa_test = "experiment -m dataset=medmcqa dataset.splits=test model=davinci 'strategy=glob(strat__*)' prompt_style=full n_docs=1"
 # additional results
 mmlu_vs_medqa = "experiment -m dataset=mmlu_usmle,medqa_us dataset.splits=test strategy=strat__0 prompt_style=short model=code max_tokens=300"
+# Codex GPT
 mmlu_code = "experiment -m dataset=mmlu_usmle dataset.splits=validation,test model=code prompt_style=short strategy=strat__0 max_tokens=300 shots=0,5 n_docs=0,1"
 medqa_test_code = "experiment -m dataset=medqa_us dataset.splits=test model=code strategy=strat__0 max_tokens=300 shots=0,5 n_docs=0,1"
-pubmedqa_test_code = "experiment -m dataset=pubmedqa dataset.splits=test model=code strategy=strat__0 max_tokens=300 shots=0,5 n_docs=1"
+medqa_test_code_cot = "experiment -m dataset=medqa_us dataset.splits=test model=code model/config=code2 strategy=strat__1 shots=0 n_docs=0,1"
+pubmedqa_test_code = "experiment -m dataset=pubmedqa dataset.splits=test model=code model/stop=contains_answer model/config=code2 strategy=strat__0 max_tokens=300 shots=0,5 n_docs=1"
 medmcqa_valid_code = "experiment -m dataset=medmcqa dataset.splits=validation dataset.subset=1000 model=code strategy=strat__0 max_tokens=300 shots=0,5 n_docs=0,1"
 medmcqa_test_code = "experiment -m dataset=medmcqa dataset.splits=test model=code strategy=strat__0 max_tokens=300 shots=0,5 n_docs=0,1"
-mmlu_code_cot = "experiment -m dataset=mmlu_usmle dataset.splits=validation,test model=code model/stop=contains_answer strategy=empty max_tokens=300 shots=0 n_docs=0 prompt_style=mmlu pre_prompt=${load:https://raw.githubusercontent.com/jasonwei20/flan-2/main/mmlu-cot.json,professional_medicine}"
-medqa_test_code_cot = "experiment -m dataset=medqa_us dataset.splits=test model=code model/stop=contains_answer strategy=empty max_tokens=300 shots=0 n_docs=0 prompt_style=mmlu pre_prompt=${load:https://raw.githubusercontent.com/jasonwei20/flan-2/main/mmlu-cot.json,professional_medicine}"
+# Codex GPT CoT
+mmlu_code_shotcot = "experiment -m dataset=mmlu_usmle dataset.splits=validation,test model=code model/stop=contains_answer strategy=empty max_tokens=300 shots=0 n_docs=0 prompt_style=mmlu pre_prompt=${load:https://raw.githubusercontent.com/jasonwei20/flan-2/main/mmlu-cot.json,professional_medicine}"
+medqa_test_code_shotcot = "experiment -m dataset=medqa_us dataset.splits=test model=code model/stop=contains_answer strategy=empty max_tokens=300 shots=0 n_docs=0 prompt_style=mmlu pre_prompt=${load:https://raw.githubusercontent.com/jasonwei20/flan-2/main/mmlu-cot.json,professional_medicine}"
+pubmedqa_test_code_shotcot = "experiment -m dataset=pubmedqa dataset.splits=test model=code model/stop=contains_answer model/config=code2 strategy=strat__1 max_tokens=300 shots=5 n_docs=1"
+# Codex GPT CoT + SC
+mmlu_code_cot_sc = "experiment -m dataset=mmlu_usmle  model=code dataset.splits=validation,test model/stop=contains_answer model/config=code_sc n_samples=20 strategy=empty max_tokens=300 shots=0 n_docs=0 prompt_style=mmlu pre_prompt=${load:https://raw.githubusercontent.com/jasonwei20/flan-2/main/mmlu-cot.json,professional_medicine}"
+medqa_test_code_cot_sc = "experiment -m dataset=medqa_us dataset.splits=test model=code model/stop=contains_answer model/config=code_sc n_samples=20 strategy=empty max_tokens=300 shots=0 n_docs=0 prompt_style=mmlu pre_prompt=${load:https://raw.githubusercontent.com/jasonwei20/flan-2/main/mmlu-cot.json,professional_medicine}"
+pubmedqa_test_code_cot_sc = "experiment -m dataset=pubmedqa dataset.splits=test model=code model/stop=contains_answer model/config=code_sc n_samples=20 strategy=strat__1 max_tokens=300 shots=5 n_docs=1"
+medmcqa_valid_code_cot_sc = "experiment -m dataset=medmcqa dataset.splits=validation model=code model/stop=contains_answer model/config=code_sc n_samples=20 strategy=strat__1 max_tokens=300 shots=5 n_docs=0"
+medmcqa_valid_code_cot_sc_mmlu = "experiment -m dataset=medmcqa dataset.splits=validation model=code model/stop=contains_answer model/config=code_sc n_samples=20 strategy=empty max_tokens=300 shots=0 n_docs=0 prompt_style=mmlu pre_prompt=${load:https://raw.githubusercontent.com/jasonwei20/flan-2/main/mmlu-cot.json,professional_medicine}"
 # utility scripts
 format  = "pre-commit run --all-files"
 test = "python -m pytest"
