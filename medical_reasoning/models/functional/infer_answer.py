@@ -6,11 +6,10 @@ from typing import List
 from typing import Optional
 from typing import T
 
-import rich
 from loguru import logger
 
 
-def get_start_indices(target: str | List, pattern: str, warn:bool=True,) -> list[int]:
+def get_start_indices(target: str | List, pattern: str, warn: bool = True, ) -> list[int]:
     try:
         matches = re.finditer(pattern, target)
         return [m.start() for m in matches]
@@ -27,7 +26,7 @@ def safe_min(lst: Iterable[T]) -> Optional[T]:
         return None
 
 
-def get_first_match(query, *, choices, keys, op=min, warn:bool=True,):
+def get_first_match(query, *, choices, keys, op=min, warn: bool = True, ):
     assert len(choices) == len(keys)
     indices = [(key, get_start_indices(query, o, warn=warn)) for key, o in zip(keys, choices)]
     indices = list(filter(lambda x: len(x[1]), indices))
@@ -38,14 +37,13 @@ def get_first_match(query, *, choices, keys, op=min, warn:bool=True,):
 
 
 def infer_answer_from_choices(
-    prompt_answer: str,
-    *,
-    option_symbols: Optional[List] = None,
-    options: Optional[List] = None,
-    pre_answer: Optional[str] = None,
-    warn:bool=True
+        prompt_answer: str,
+        *,
+        option_symbols: Optional[List] = None,
+        options: Optional[List] = None,
+        pre_answer: Optional[str] = None,
+        warn: bool = True
 ) -> None | str:
-
     if len(prompt_answer) == 1:
         return prompt_answer
 
@@ -61,10 +59,12 @@ def infer_answer_from_choices(
 
     # step 2. Try to cache the options from `options`
     logger.debug(
-        f"Inferring labels from {option_symbols} failed. "
-        f"trying to match the provided options"
+        f"Failed to match options symbols `{option_symbols}` from the completion. "
+        f"Trying to match the options texts `{options}`."
     )
-    match = get_first_match(prompt_answer, choices=options, keys=option_symbols, op=min,  warn=warn,)
+    # rich.print(f"[green]Prompt answer:[/green][white]`{prompt_answer}`[/white]")
+    match = get_first_match(prompt_answer, choices=options, keys=option_symbols, op=min,
+                            warn=warn, )
     if match is not None:
         return match
     elif pre_answer is None:
@@ -72,14 +72,16 @@ def infer_answer_from_choices(
 
     # step 3. Try to catch a last mention of the answer in the pre-answer
     logger.debug(
-        f"Inferring labels from {options} failed. " f"trying to match the pre answer"
+        f"Failed to match the options texts `{options}`. "
+        f"Seeking answers in the previous completion step."
     )
-    match = get_first_match(pre_answer, choices=options, keys=option_symbols, op=max,  warn=warn,)
+    # rich.print(f"[magenta]Prompt pre-answer:[/magenta][white]`{pre_answer}`[/white]")
+    match = get_first_match(pre_answer, choices=options, keys=option_symbols, op=max, warn=warn, )
     if match is not None:
         return match
 
     match = get_first_match(
-        pre_answer, choices=option_symbols_re, keys=option_symbols, op=max,  warn=warn,
+        pre_answer, choices=option_symbols_re, keys=option_symbols, op=max, warn=warn,
     )
     if match is not None:
         return match

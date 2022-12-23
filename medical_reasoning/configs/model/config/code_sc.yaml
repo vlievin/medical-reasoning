@@ -2,4 +2,4 @@ defaults:
   - default
 
 temperature: 0.5
-stop: ["<|endoftext|>", "Q: ", "Question: ", "Context: "]
+stop: [ "<|endoftext|>", "Q: ", "Question: ", "Context: " ]

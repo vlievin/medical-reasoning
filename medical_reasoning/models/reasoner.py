@@ -10,7 +10,7 @@ from typing import Dict
 from typing import List
 from typing import Optional
 
-import loguru
+from loguru import logger
 import numpy as np
 import omegaconf
 import openai
@@ -306,22 +306,26 @@ class Reasoner(object):
             max_price = max([self.estimate_price(c) for c in completions])
             self.total_cost += max_price * len(completions)
 
-        completions = self._cleanup_completions(completions)
+        completions = [self._cleanup_completion(c, end_tokens=kwargs['stop'])
+                       for c in completions]
 
         return completions
 
-    def _cleanup_completions(self, completions):
-        END_TOKEN = "<|endoftext|>"
-        cleaned_completions = []
-        for completion in completions:
-            parts = completion.split(END_TOKEN)
-            if len(parts) > 1:
-                loguru.Logger.warning(
-                    f"Found generated text after end token: "
-                    f"{END_TOKEN}: {END_TOKEN.join(parts[1:])}"
-                )
-            cleaned_completions.append(parts[0])
-        return cleaned_completions
+    def _cleanup_completion(self, completion, end_tokens=None):
+        if end_tokens is None:
+            end_tokens = ["<|endoftext|>"]
+        matched_tokens = [t for t in end_tokens if t in completion]
+        if len(matched_tokens) == 0:
+            return completion
+        first_token = min([completion.index(t) for t in matched_tokens])
+        parts = completion.split(first_token)
+        if len(parts) > 1:
+            logger.warning(
+                f"Found generated text after end token: "
+                f"{first_token}: {first_token.join(parts[1:])}"
+            )
+        completion = parts[0]
+        return completion
 
     def _simulate_completion(self, n_tokens):
         rgn = np.random.RandomState(0)

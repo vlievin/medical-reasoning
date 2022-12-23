@@ -28,6 +28,7 @@ from slugify import slugify
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+import medical_reasoning
 from medical_reasoning.datasets import DatasetBuilder
 from medical_reasoning.datasets.stats import DatasetStats
 from medical_reasoning.models import Reasoner
@@ -63,19 +64,24 @@ def make_info(prompt_style, permute_options, n_docs, shots, strip_reasoning, pre
 
 
 def load_file_or_url(path: str, key:str=None):
+
     if path.startswith("http"):
         content = requests.get(path).text
     else:
         path = Path(path)
         if not path.exists():
-            raise ValueError(f"Path {path} is not a file.")
+            path = Path(medical_reasoning.__file__).parent.parent / path
+            if not path.exists():
+                raise ValueError(f"File {path} does not exist")
         with open(path, "r") as f:
             content = f.read()
 
-    if path.endswith(".json"):
+    if str(path).endswith(".json"):
         content = json.loads(content)
-    elif path.endswith(".yaml"):
+    elif str(path).endswith(".yaml"):
         content = OmegaConf.load(content)
+    elif str(path).endswith(".txt"):
+        ...
     else:
         raise ValueError(f"Could not load {path}.")
 
