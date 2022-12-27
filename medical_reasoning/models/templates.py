@@ -292,11 +292,15 @@ class ReasoningMultipleChoiceTemplate(MultipleChoiceTemplate):
 
     def infer_answer(
             self,
-            *args,
+            prompt_answer: str,
+            *,
             warn: bool = False,
             **kwargs,
     ) -> None | str:
-        return super().infer_answer(*args, warn=warn, **kwargs)
+        COT_ANSWER_PATTERN = "the answer is"
+        if COT_ANSWER_PATTERN in prompt_answer:
+            prompt_answer = prompt_answer.split(COT_ANSWER_PATTERN)[1]
+        return super().infer_answer(prompt_answer, warn=warn, **kwargs)
 
     def simulate_completion(self, eg: Example) -> str:
         return f"\n{eg.reasoning}"

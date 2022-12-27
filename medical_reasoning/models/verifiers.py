@@ -7,7 +7,7 @@ import numpy as np
 
 from medical_reasoning.utils.datastruct import Example
 from medical_reasoning.utils.datastruct import Prediction
-
+from loguru import logger
 
 class Verifier(object):
     @abc.abstractmethod
@@ -33,17 +33,20 @@ class MajorityVotingVerifier(Verifier):
 
         # compute the probabilities
         probs = np.zeros((len(eg.option_symbols),))
-        for a in answer_candidates:
-            if a is None:
-                i = np.random.randint(0, len(eg.option_symbols))
-            else:
-                i = eg.option_symbols.index(a)
-            probs[i] += 1
 
-        probs /= len(answer_candidates)
+        try:
+            for a in answer_candidates:
+                if a is None:
+                    i = np.random.randint(0, len(eg.option_symbols))
+                else:
+                    i = eg.option_symbols.index(a)
+                probs[i] += 1
 
-        # return
-        pred_str = freqs.most_common(1)[0][0]
+            probs /= len(answer_candidates)
+            pred_str = freqs.most_common(1)[0][0]
+        except ValueError as exc:
+            logger.error(f"ValueError: {exc}")
+            pred_str = None
         return Prediction(
             prediction_str=pred_str,
             example=eg,

@@ -1,11 +1,18 @@
 > **Warning** Work in progress
 
-# Medical Reasoning using GPT-3
+# Medical Reasoning using GPT-3.5
 
 Official repository for the paper [Can large language models reason about medical questions?](https://arxiv.org/abs/2207.08143)
 
-> Although large language models (LLMs) often produce impressive outputs, they also fail to reason and be factual. We set out to investigate how these limitations affect the LLM's ability to answer and reason about difficult real-world based questions. We applied the human-aligned GPT-3 (InstructGPT) to answer multiple-choice medical exam questions (USMLE and MedMCQA) and medical research questions (PubMedQA). We investigated Chain-of-thought (think step by step) prompts, grounding (augmenting the prompt with search results) and few-shot (prepending the question with question-answer exemplars). For a subset of the USMLE questions, a medical domain expert reviewed and annotated the model's reasoning. Overall, GPT-3 achieved a substantial improvement in state-of-the-art machine learning performance. We observed that GPT-3 is often knowledgeable and can reason about medical questions. GPT-3, when confronted with a question it cannot answer, will still attempt to answer, often resulting in a biased predictive distribution. LLMs are not on par with human performance but our results suggest the emergence of reasoning patterns that are compatible with medical problem-solving. We speculate that scaling model and data, enhancing prompt alignment and allowing for better contextualization of the completions will be sufficient for LLMs to reach human-level performance on this type of task.
+## Abstract
 
+> Although large language models (LLMs) often produce impressive outputs, it remains unclear how they perform in real-world scenarios requiring strong reasoning skills and expert domain knowledge. We set out to investigate whether GPT-3.5 (Codex and InstructGPT) can be applied to answer and reason about difficult real-world-based questions. We utilize two multiple-choice medical exam questions (USMLE and MedMCQA) and a medical reading comprehension dataset (PubMedQA). We investigate multiple prompting scenarios: Chain-of-Thought (CoT, think step-by-step), zero- and few-shot (prepending the question with question-answer exemplars) and retrieval augmentation (injecting Wikipedia passages into the prompt). For a subset of the USMLE questions, a medical expert reviewed and annotated the model's CoT. We found that InstructGPT can often read, reason and recall expert knowledge. Failure are primarily due to lack of knowledge and reasoning errors and trivial guessing heuristics are observed, e.g.\ too often predicting labels A and D on USMLE. Sampling and combining many completions overcome some of these limitations. Using 100 samples, Codex 5-shot CoT not only gives close to well-calibrated predictive probability but also achieves human-level performances on the three datasets. USMLE: 60.2%, MedMCQA: 57.5% and PubMedQA: 78.2%.
+
+## CoT Samples
+
+Samples of generated CoTs for the USMLE, MedMCQA and PubMedQA datasets can be accessed [here](https://vlievin.github.io/medical-reasoning).
+
+More samples will be made available through [ThoughtSource ⚡](https://github.com/OpenBioLink/ThoughtSource).
 
 ## Setup
 
@@ -57,18 +64,6 @@ poetry run poe medqa_test
 poetry run poe medmcqa_valid
 poetry run poe pubmedqa_test
 poetry run poe mmlu_test_code
-```
-
-## Samples
-
-Samples of generated CoTs for the USMLE, MedMCQA and PubMedQA datasets can be accessed [here](https://vlievin.github.io/medical-reasoning).
-
-## Cached GPT-3 predictions
-
-All GPT-3 completions are automatically cached (see `medical_reasoning/models/cache.py`) and re-used whenever the API is called using the same parameters. You can find all the cached completions (all experiments, all the chain-of-thoughts) in the following zip files;
-
-```shell
-https://f001.backblazeb2.com/file/FindZebraData/medical-reasoning/cached_funcs.zip
 ```
 
 ## Citation

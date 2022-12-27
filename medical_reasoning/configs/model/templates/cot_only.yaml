@@ -1,0 +1,4 @@
+defaults:
+  - /model/template/reasoning@reasoning
+
+_target_: medical_reasoning.models.templates.auto_templates

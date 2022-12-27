@@ -3,3 +3,4 @@ defaults:
 
 name: medmcqa
 splits: validation
+subset: 1000

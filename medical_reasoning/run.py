@@ -28,6 +28,7 @@ from slugify import slugify
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+import medical_reasoning
 from medical_reasoning.datasets import DatasetBuilder
 from medical_reasoning.datasets.stats import DatasetStats
 from medical_reasoning.models import Reasoner
@@ -64,19 +65,24 @@ def make_info(prompt_style, permute_options, n_docs, shots, strip_reasoning, pre
 
 
 def load_file_or_url(path: str, key:str=None):
+
     if path.startswith("http"):
         content = requests.get(path).text
     else:
         path = Path(path)
         if not path.exists():
-            raise ValueError(f"Path {path} is not a file.")
+            path = Path(medical_reasoning.__file__).parent.parent / path
+            if not path.exists():
+                raise ValueError(f"File {path} does not exist")
         with open(path, "r") as f:
             content = f.read()
 
-    if path.endswith(".json"):
+    if str(path).endswith(".json"):
         content = json.loads(content)
-    elif path.endswith(".yaml"):
+    elif str(path).endswith(".yaml"):
         content = OmegaConf.load(content)
+    elif str(path).endswith(".txt"):
+        ...
     else:
         raise ValueError(f"Could not load {path}.")
 
@@ -142,6 +148,7 @@ def run(config: DictConfig) -> None:
     option_symbols = builder.options
     dataset_stats = DatasetStats()(dataset)
     json.dump(dataset_stats, Path("dataset_stats.json").open("w"), indent=2)
+    rich.print(dataset_stats)
 
     # initialize the preprocessing object
     use_index = config.n_docs > 0 and "documents" not in dataset[splits[0]].column_names
@@ -175,12 +182,13 @@ def run(config: DictConfig) -> None:
     for split in splits:
         labels = []
         preds = []
+        probs = []
         locators = []
         loader = DataLoader(
             preprocessing[split],
             num_workers=config.num_workers,
             batch_size=1,
-            shuffle=False,
+            shuffle=config.get("shuffle_loader", False),
             collate_fn=get_first_el,
         )
         for i, (row_idx, eg, shots) in (
@@ -192,6 +200,7 @@ def run(config: DictConfig) -> None:
             # update the trackers
             labels.append(eg.answer_idx)
             preds.append(pred.idx)
+            probs.append(pred.probs)
 
             # log the progress
             f1 = f1_score(labels, preds, average="macro")
@@ -256,6 +265,7 @@ def run(config: DictConfig) -> None:
                         **split_results,
                         "labels": labels,
                         "predictions": preds,
+                        "probs": probs,
                         "locators": locators,
                         "preds_freq": preds_freq,
                     }
