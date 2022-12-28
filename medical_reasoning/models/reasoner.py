@@ -178,6 +178,18 @@ class Reasoner(object):
                 f"{flow}{prompt}", **engine_args
             )
 
+        # TEMPORARY FIX: the stop words are not working in rare cases
+        # so we filter the completions manually here in order to re-use the cache
+        PUBMEDQA = ["Context:", "Question:", "##", "A) yes}B) no}C) maybe}", "A) yes\nB) no\nC) maybe\n"]
+        MEDMCQA = ["Context:", "Question:", "A) yes}B) no}C) maybe}", "A) yes\nB) no\nC) maybe\n"]
+        for i, prompt_completion in enumerate(prompt_completions):
+            for STOP in MEDMCQA:
+                if STOP in prompt_completion:
+                    print(prompt_completion)
+                    *y, _ = prompt_completion.split(STOP)
+                    prompt_completion = STOP.join(y)
+            prompt_completions[i] = prompt_completion
+
         # store the prompt completions
         completion_key = f"{template.name}.completions"
         if completion_key in meta:

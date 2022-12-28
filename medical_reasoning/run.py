@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import hashlib
 import json
 import logging
@@ -32,7 +33,6 @@ import medical_reasoning
 from medical_reasoning.datasets import DatasetBuilder
 from medical_reasoning.datasets.stats import DatasetStats
 from medical_reasoning.models import Reasoner
-from medical_reasoning.models.templates import ReasoningMultipleChoiceTemplate
 from medical_reasoning.utils.config import print_config
 from medical_reasoning.utils.datastruct import Example
 from medical_reasoning.utils.datastruct import Prediction
@@ -64,8 +64,7 @@ def make_info(prompt_style, permute_options, n_docs, shots, strip_reasoning, pre
     return info_name
 
 
-def load_file_or_url(path: str, key:str=None):
-
+def load_file_or_url(path: str, key: str = None):
     if path.startswith("http"):
         content = requests.get(path).text
     else:
@@ -223,7 +222,7 @@ def run(config: DictConfig) -> None:
                 f.write(output_str)
 
             # dump all data to file
-            all_data = get_all_data(eg, pred, q_locator, model=model,flows=flows)
+            all_data = get_all_data(eg, pred, q_locator, model=model, flows=flows)
             fname = fname.replace(".txt", ".json")
             with open(dump_output_dir / fname, "w") as f:
                 f.write(json.dumps(all_data, indent=2))
@@ -257,7 +256,6 @@ def run(config: DictConfig) -> None:
         }
 
         # write data
-
         with open(data_file.as_posix(), "w") as f:
             f.write(
                 json.dumps(
@@ -285,6 +283,7 @@ def run(config: DictConfig) -> None:
 
     logger.info(f">> Logged to {output_dir}")
 
+
 def get_all_data(
         eg: Example,
         pred: Prediction,
@@ -292,9 +291,6 @@ def get_all_data(
         model: Reasoner,
         flows: List[str],
 ):
-    assert len(flows) == 1
-    flow = flows[0]
-
     output = {
         "question": eg.question,
         "options": eg.options,
@@ -303,8 +299,9 @@ def get_all_data(
         "answer_symbol": eg.answer_symbol,
         "prediction": pred.label,
         "prediction_idx": pred.idx,
+        "prediction_idx_per_sample": pred.prediction_idx_per_sample,
         "prediction_symbol": pred.outcome,
-        "prompt_and_completion": flow,
+        "prompt_and_completions": flows,
         "q_locator": q_locator,
     }
 
@@ -315,16 +312,29 @@ def get_all_data(
         output["reasoning_prompt"] = reasoning_template.format_strategy(eg=eg)
         extractive_template = model.templates["extraction"]
         output["extractive_prompt"] = extractive_template.extractive_prompt(eg=eg)
-        answer_symbol = {"short": "A: ", "full": "Answer: "}[output["style"]]
+        answer_symbol = {"short": "A: ", "mmlu": "A:", "full": "Answer: "}[output["style"]]
 
         # split the flow
-        task_prompt, x = flow.split(output["reasoning_prompt"])
-        cot, answer = x.split(output["extractive_prompt"])
+        task_prompts = set()
+        cots = []
+        extractive_prompt = output["extractive_prompt"]
+        for j, flow in enumerate(flows):
+            *task_prompt_, cot = flow.split(answer_symbol)
+            task_prompt_ = answer_symbol.join(task_prompt_)
+            cot, *answer = cot.split(extractive_prompt)
+            cots.append(cot)
+            task_prompts.add(task_prompt_)
+
+        if len(task_prompts) > 1:
+            logger.error(
+                f"Task prompt is not consistent between completions (n={len(task_prompts)}).")
+        task_prompt = collections.Counter(task_prompts).most_common(1)[0][0]
         output["task_prompt"] = task_prompt
-        output["cot"] = (output["reasoning_prompt"] + cot).replace(answer_symbol, "")
+        output["cots"] = cots
         # output["extractive_prompt_and_completion"] = output["extractive_prompt"] + answer
 
     return output
+
 
 def format_prediction(
         eg: Example,

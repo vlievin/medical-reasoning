@@ -33,23 +33,27 @@ class MajorityVotingVerifier(Verifier):
 
         # compute the probabilities
         probs = np.zeros((len(eg.option_symbols),))
+        prediction_idx_per_sample = []
+        for a in answer_candidates:
+            try:
+                i = eg.option_symbols.index(a)
+            except Exception as exc:
+                logger.warning(
+                    f"Answer {a} not found in option symbols {eg.option_symbols}. "
+                    f"Exception: {exc}"
+                )
+                i = np.random.randint(0, len(eg.option_symbols))
 
-        try:
-            for a in answer_candidates:
-                if a is None:
-                    i = np.random.randint(0, len(eg.option_symbols))
-                else:
-                    i = eg.option_symbols.index(a)
-                probs[i] += 1
+            probs[i] += 1
+            prediction_idx_per_sample.append(i)
 
-            probs /= len(answer_candidates)
-            pred_str = freqs.most_common(1)[0][0]
-        except ValueError as exc:
-            logger.error(f"ValueError: {exc}")
-            pred_str = None
+        probs /= len(answer_candidates)
+        pred_str = freqs.most_common(1)[0][0]
+
         return Prediction(
             prediction_str=pred_str,
             example=eg,
             meta=meta,
             probs=probs.tolist(),
+            prediction_idx_per_sample=prediction_idx_per_sample,
         )

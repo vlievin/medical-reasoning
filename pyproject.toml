@@ -77,7 +77,8 @@ medmcqa_valid_code_cot_sc = "experiment -m dataset=medmcqa dataset.splits=valida
 medmcqa_valid_code_cot_sc_mmlu = "experiment -m dataset=medmcqa dataset.splits=validation model=code model/stop=contains_answer model/config=code_sc n_samples=20 strategy=empty max_tokens=300 shots=0 n_docs=0 prompt_style=mmlu pre_prompt=${load:https://raw.githubusercontent.com/jasonwei20/flan-2/main/mmlu-cot.json,professional_medicine}"
 # 100 samples
 medqa_test_code_cot_sc_100 = "experiment -m dataset=medqa_us dataset.splits=test model=code model/stop=contains_answer model/config=code_sc n_samples=20 strategy=empty max_tokens=300 shots=0 n_docs=0 prompt_style=mmlu pre_prompt=${load:https://raw.githubusercontent.com/jasonwei20/flan-2/main/mmlu-cot.json,professional_medicine} model.config.temperature=0.5,0.51,0.52,0.53,0.54"
-medmcqa_valid_code_coy_sc_100 = "dataset=medmcqa dataset.splits=validation model=code model/stop=contains_answer model/config=code_sc n_samples=20 strategy=strat__1 max_tokens=300 shots=5 n_docs=0 sys=titan n_samples=10 model.config.temperature=0.500,0.501,0.502,0.503,0.504,0.499,0.498,0.497,0.496,0.495"
+medmcqa_valid_code_cot_sc_100 = "experiment -m dataset=medmcqa dataset.splits=validation model=code model/stop=contains_answer model/config=code_sc n_samples=20 strategy=strat__1 max_tokens=300 shots=5 n_docs=0 sys=titan n_samples=10 model.config.temperature=0.500,0.501,0.502,0.503,0.504,0.499,0.498,0.497,0.496,0.495"
+pubmedqa_test_code_cot_sc_100 = "experiment -m dataset=pubmedqa dataset.splits=test model=code model/stop=contains_answer model/config=code_sc strategy=strat__1 max_tokens=300 shots=5 n_docs=1 n_samples=10 model.config.temperature=0.50,0.51,0.52,0.53,0.54,0.55,0.56,0.57,0.58,0.59"
 # utility scripts
 format  = "pre-commit run --all-files"
 test = "python -m pytest"

@@ -104,6 +104,7 @@ class Prediction(BaseModel):
     prediction_idx: int = -1
     label: str = "N/A"
     probs: Optional[List[float]] = None
+    prediction_idx_per_sample: Optional[List[int]] = None
 
     @property
     def idx(self):
