@@ -1,4 +1,4 @@
-> **Warning** Work in progress
+> **Note** This repo is a snapshot of the code used to produce our results up to December 2022 (v2, including Codex 5-shot CoT results). The code won't be updated further to ensure maximum reproducibility
 
 # Medical Reasoning using GPT-3.5
 
