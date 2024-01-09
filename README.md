@@ -1,8 +1,8 @@
-> **Note** This repo is a snapshot of the code used to produce our results up to December 2022 (v2, including Codex 5-shot CoT results). The code won't be updated further to ensure maximum reproducibility
+> **Note**: This repository (`medical-reasoning`) is a snapshot of the code used to produce our results up to December 2022, including Codex 5-shot CoT results for version 2 of our paper. The repository is now archived and will not receive further updates, ensuring maximum reproducibility of the results. For our latest research using open-source large language models, please refer to the `med-chain` repository, the new official repository for ongoing work. It can be accessed at [https://github.com/MotzWanted/med-chain](https://github.com/MotzWanted/med-chain)
 
 # Medical Reasoning using GPT-3.5
 
-Official repository for the paper [Can large language models reason about medical questions?](https://arxiv.org/abs/2207.08143)
+Official legacy repository for the paper [Can large language models reason about medical questions?](https://arxiv.org/abs/2207.08143)
 
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/can-large-language-models-reason-about/question-answering-on-medqa-usmle)](https://paperswithcode.com/sota/question-answering-on-medqa-usmle?p=can-large-language-models-reason-about)
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/can-large-language-models-reason-about/multiple-choice-question-answering-mcqa-on-21)](https://paperswithcode.com/sota/multiple-choice-question-answering-mcqa-on-21?p=can-large-language-models-reason-about)
